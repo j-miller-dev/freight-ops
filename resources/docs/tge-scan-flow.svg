@@ -1,0 +1,175 @@
+<svg viewBox="0 0 900 1100" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <title>TGE Warehouse PWA — Scan Transaction Data Flow</title>
+
+  <defs>
+    <marker id="arrowDown" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowRight" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#22c55e"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#f59e0b"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#8b5cf6"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#ef4444"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="1100" rx="12" fill="#0f172a"/>
+
+  <!-- Title -->
+  <rect x="20" y="16" width="860" height="56" rx="8" fill="#1e293b"/>
+  <text x="450" y="44" text-anchor="middle" fill="#f8fafc" font-size="20" font-weight="700">Scan Transaction — Complete Data Flow</text>
+  <text x="880" y="44" text-anchor="end" fill="#64748b" font-size="11">Barcode → Dexie → Sync → Laravel → MySQL → WebSocket → UI</text>
+
+  <!-- ═══════════ STEP 1: BARCODE SCAN ═══════════ -->
+  <rect x="300" y="90" width="300" height="70" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2"/>
+  <text x="450" y="118" text-anchor="middle" fill="#93c5fd" font-size="15" font-weight="700">1. BARCODE SCAN</text>
+  <text x="450" y="138" text-anchor="middle" fill="#64748b" font-size="11">BarcodeDetector API or manual connote entry</text>
+
+  <!-- Step label -->
+  <rect x="50" y="100" width="220" height="48" rx="6" fill="#0c1e36" stroke="#1e40af" stroke-width="1"/>
+  <text x="160" y="122" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">React: ScanWorkflow.jsx</text>
+  <text x="160" y="138" text-anchor="middle" fill="#475569" font-size="10">handleScan(connoteNumber)</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="160" x2="450" y2="195" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ═══════════ STEP 2: LOCAL WRITE ═══════════ -->
+  <rect x="300" y="200" width="300" height="70" rx="10" fill="#2d1748" stroke="#8b5cf6" stroke-width="2"/>
+  <text x="450" y="228" text-anchor="middle" fill="#c4b5fd" font-size="15" font-weight="700">2. DEXIE LOCAL WRITE</text>
+  <text x="450" y="248" text-anchor="middle" fill="#64748b" font-size="11">Instant write to IndexedDB — no network needed</text>
+
+  <rect x="50" y="210" width="220" height="48" rx="6" fill="#1a0e30" stroke="#6d28d9" stroke-width="1"/>
+  <text x="160" y="232" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="600">db.scans.add({ ... })</text>
+  <text x="160" y="248" text-anchor="middle" fill="#475569" font-size="10">status: 'pending', synced: false</text>
+
+  <rect x="630" y="210" width="220" height="48" rx="6" fill="#1a0e30" stroke="#6d28d9" stroke-width="1"/>
+  <text x="740" y="232" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="600">UI instant feedback</text>
+  <text x="740" y="248" text-anchor="middle" fill="#475569" font-size="10">Scan appears in list immediately</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="270" x2="450" y2="305" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ═══════════ STEP 3: SYNC QUEUE ═══════════ -->
+  <rect x="300" y="310" width="300" height="70" rx="10" fill="#2d1748" stroke="#8b5cf6" stroke-width="2"/>
+  <text x="450" y="338" text-anchor="middle" fill="#c4b5fd" font-size="15" font-weight="700">3. OUTBOX SYNC QUEUE</text>
+  <text x="450" y="358" text-anchor="middle" fill="#64748b" font-size="11">Queued in Dexie outbox table</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="380" x2="450" y2="415" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ═══════════ STEP 4: ONLINE/OFFLINE BRANCH ═══════════ -->
+  <!-- Diamond -->
+  <polygon points="450,420 530,465 450,510 370,465" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
+  <text x="450" y="462" text-anchor="middle" fill="#fcd34d" font-size="13" font-weight="700">ONLINE?</text>
+  <text x="450" y="478" text-anchor="middle" fill="#fbbf24" font-size="11">navigator.onLine</text>
+
+  <!-- OFFLINE path (left) -->
+  <line x1="370" y1="465" x2="180" y2="465" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrowAmber)"/>
+  <text x="275" y="455" text-anchor="middle" fill="#fbbf24" font-size="12" font-weight="600">OFFLINE</text>
+
+  <rect x="50" y="435" width="220" height="60" rx="8" fill="#451a03" stroke="#d97706" stroke-width="1.5"/>
+  <text x="160" y="458" text-anchor="middle" fill="#fcd34d" font-size="12" font-weight="600">Wait + Retry</text>
+  <text x="160" y="476" text-anchor="middle" fill="#92400e" font-size="10">Workbox BackgroundSync</text>
+  <text x="160" y="488" text-anchor="middle" fill="#92400e" font-size="10">retries when connection restores</text>
+
+  <!-- Curved arrow back from offline to online path -->
+  <path d="M160,495 L160,530 Q160,545 175,545 L365,545" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowAmber)"/>
+  <text x="260" y="540" text-anchor="middle" fill="#d97706" font-size="10">reconnect → drain queue</text>
+
+  <!-- ONLINE path (down) -->
+  <line x1="450" y1="510" x2="450" y2="545" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="470" y="530" fill="#4ade80" font-size="12" font-weight="600">ONLINE</text>
+
+  <!-- ═══════════ STEP 5: API POST ═══════════ -->
+  <rect x="300" y="550" width="300" height="70" rx="10" fill="#7f1d1d" stroke="#ef4444" stroke-width="2"/>
+  <text x="450" y="578" text-anchor="middle" fill="#fca5a5" font-size="15" font-weight="700">5. POST /api/scans</text>
+  <text x="450" y="598" text-anchor="middle" fill="#7f7f7f" font-size="11">StoreScanRequest validates payload</text>
+
+  <rect x="630" y="556" width="220" height="56" rx="6" fill="#450a0a" stroke="#b91c1c" stroke-width="1"/>
+  <text x="740" y="578" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="600">StoreScanRequest</text>
+  <text x="740" y="594" text-anchor="middle" fill="#7f5555" font-size="10">connote required · shift_id exists</text>
+  <text x="740" y="606" text-anchor="middle" fill="#7f5555" font-size="10">duplicate check · user authorized</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="620" x2="450" y2="655" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ═══════════ STEP 6: CONFLICT DETECTION ═══════════ -->
+  <polygon points="450,660 540,705 450,750 360,705" fill="#1e293b" stroke="#ef4444" stroke-width="2"/>
+  <text x="450" y="700" text-anchor="middle" fill="#fca5a5" font-size="12" font-weight="700">CONFLICT?</text>
+  <text x="450" y="716" text-anchor="middle" fill="#f87171" font-size="10">Duplicate connote</text>
+
+  <!-- Conflict YES path (right) -->
+  <line x1="540" y1="705" x2="680" y2="705" stroke="#ef4444" stroke-width="2" marker-end="url(#arrowRed)"/>
+  <text x="610" y="695" text-anchor="middle" fill="#ef4444" font-size="11" font-weight="600">YES</text>
+
+  <rect x="690" y="680" width="170" height="50" rx="8" fill="#450a0a" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="775" y="700" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="600">Flag Exception</text>
+  <text x="775" y="718" text-anchor="middle" fill="#7f5555" font-size="10">Log + alert supervisor</text>
+
+  <!-- No conflict (down) -->
+  <line x1="450" y1="750" x2="450" y2="785" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="470" y="772" fill="#4ade80" font-size="11" font-weight="600">NO</text>
+
+  <!-- ═══════════ STEP 7: TIER CLASSIFICATION ═══════════ -->
+  <rect x="300" y="790" width="300" height="70" rx="10" fill="#78350f" stroke="#f59e0b" stroke-width="2"/>
+  <text x="450" y="818" text-anchor="middle" fill="#fcd34d" font-size="15" font-weight="700">7. TIER CLASSIFICATION</text>
+  <text x="450" y="838" text-anchor="middle" fill="#92400e" font-size="11">FreightService::classify($freightItem)</text>
+
+  <!-- Tier labels -->
+  <rect x="50" y="796" width="60" height="28" rx="4" fill="#dc2626"/>
+  <text x="80" y="815" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">T1 DG</text>
+
+  <rect x="118" y="796" width="72" height="28" rx="4" fill="#f59e0b"/>
+  <text x="154" y="815" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">T2 FRAG</text>
+
+  <rect x="198" y="796" width="70" height="28" rx="4" fill="#3b82f6"/>
+  <text x="233" y="815" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">T3 BULK</text>
+
+  <rect x="50" y="830" width="80" height="28" rx="4" fill="#6b7280"/>
+  <text x="90" y="849" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">T4 LOW</text>
+
+  <text x="140" y="849" fill="#92400e" font-size="10">ADG Code → DG rules · time-decay · weight/dims</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="860" x2="450" y2="895" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ═══════════ STEP 8: PERSIST ═══════════ -->
+  <rect x="300" y="900" width="300" height="60" rx="10" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
+  <text x="450" y="926" text-anchor="middle" fill="#86efac" font-size="15" font-weight="700">8. MYSQL PERSIST</text>
+  <text x="450" y="944" text-anchor="middle" fill="#166534" font-size="11">scans + freight_items tables updated</text>
+
+  <rect x="50" y="905" width="220" height="48" rx="6" fill="#0f3d21" stroke="#16a34a" stroke-width="1"/>
+  <text x="160" y="926" text-anchor="middle" fill="#86efac" font-size="11" font-weight="600">FreightScanned Event fires</text>
+  <text x="160" y="942" text-anchor="middle" fill="#166534" font-size="10">→ ClassifyPriority listener</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="960" x2="450" y2="995" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ═══════════ STEP 9: BROADCAST ═══════════ -->
+  <rect x="300" y="1000" width="300" height="70" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2"/>
+  <text x="450" y="1028" text-anchor="middle" fill="#93c5fd" font-size="15" font-weight="700">9. WEBSOCKET BROADCAST</text>
+  <text x="450" y="1048" text-anchor="middle" fill="#1e40af" font-size="11">Laravel Reverb → FreightUpdated event</text>
+
+  <rect x="630" y="1005" width="220" height="56" rx="6" fill="#0c1e36" stroke="#1e40af" stroke-width="1"/>
+  <text x="740" y="1028" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">All tablet dashboards</text>
+  <text x="740" y="1044" text-anchor="middle" fill="#475569" font-size="10">React receives via Echo</text>
+  <text x="740" y="1058" text-anchor="middle" fill="#475569" font-size="10">Priority queue re-renders</text>
+
+  <rect x="50" y="1005" width="220" height="56" rx="6" fill="#0c1e36" stroke="#1e40af" stroke-width="1"/>
+  <text x="160" y="1028" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">Dexie outbox cleared</text>
+  <text x="160" y="1044" text-anchor="middle" fill="#475569" font-size="10">synced: true confirmation</text>
+  <text x="160" y="1058" text-anchor="middle" fill="#475569" font-size="10">SyncStatusProvider updates</text>
+</svg>
