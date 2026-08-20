@@ -27,3 +27,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Personal docs
+/BLUEPRINT.md
+/resources/docs/*.md
+/resources/docs/explanations/
