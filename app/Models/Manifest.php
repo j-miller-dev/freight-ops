@@ -56,6 +56,7 @@ class Manifest extends Model
             'service_date' => 'date',
             'source_updated_at' => 'datetime',
             'last_synced_at' => 'datetime',
+            'closed_at' => 'datetime',
         ];
     }
 }

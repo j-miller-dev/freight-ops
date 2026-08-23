@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('manifest_number');
             $table->date('service_date');
             $table->string('status')->default('open');
+            $table->timestamp('closed_at')->nullable();
             $table->string('trailer_label')->nullable();
             $table->string('trailer_registration')->nullable();
             $table->timestamp('source_updated_at')->nullable();
