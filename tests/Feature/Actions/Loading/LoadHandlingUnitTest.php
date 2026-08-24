@@ -2,6 +2,7 @@
 
 use App\Actions\Loading\LoadHandlingUnit;
 use App\Enums\HandlingUnitStatus;
+use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
@@ -11,6 +12,7 @@ use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
 use App\Models\User;
+use App\Models\WarningAcknowledgement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -246,4 +248,59 @@ it('reports a destination mismatch without loading the pallet', function () {
         ->and(ManifestItem::query()->count())->toBe(0)
         ->and($pallet->fresh()->current_status)
         ->toBe(HandlingUnitStatus::Pending);
+});
+
+it('loads a wrong-destination pallet when the warning is acknowledged', function () {
+    $manifestDestination = Depot::factory()->create([
+        'code' => 'SYD03',
+    ]);
+
+    $palletDestination = Depot::factory()->create([
+        'code' => 'ADL03',
+    ]);
+
+    $manifest = Manifest::factory()->create([
+        'status' => 'open',
+    ]);
+
+    $manifest->destinations()->attach($manifestDestination, [
+        'is_primary' => true,
+    ]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $palletDestination->getKey(),
+        'item_count' => 1,
+    ]);
+
+    $pallet = HandlingUnit::factory()
+        ->for($consignment)
+        ->create([
+            'current_status' => HandlingUnitStatus::Pending,
+        ]);
+
+    $loader = User::factory()->create();
+    $occurredAt = now();
+
+    $manifestItem = app(LoadHandlingUnit::class)->handle(
+        manifest: $manifest,
+        handlingUnit: $pallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: $occurredAt,
+        acknowledgedWarnings: [
+            LoadWarningType::DestinationMismatch,
+        ],
+    );
+
+    $acknowledgement = WarningAcknowledgement::query()->sole();
+
+    expect($manifestItem->handlingUnit->is($pallet))->toBeTrue()
+        ->and($manifestItem->manifest->is($manifest))->toBeTrue()
+        ->and($pallet->fresh()->current_status)
+        ->toBe(HandlingUnitStatus::Loaded)
+        ->and($acknowledgement->warning_type)
+        ->toBe(LoadWarningType::DestinationMismatch)
+        ->and($acknowledgement->handlingUnit->is($pallet))->toBeTrue()
+        ->and($acknowledgement->manifest->is($manifest))->toBeTrue()
+        ->and($acknowledgement->acknowledgedBy->is($loader))->toBeTrue();
 });

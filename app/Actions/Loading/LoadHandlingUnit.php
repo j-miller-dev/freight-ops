@@ -3,6 +3,7 @@
 namespace App\Actions\Loading;
 
 use App\Enums\HandlingUnitStatus;
+use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
@@ -11,6 +12,7 @@ use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
 use App\Models\User;
+use App\Models\WarningAcknowledgement;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -22,6 +24,7 @@ class LoadHandlingUnit
         User $loader,
         string $clientEventId,
         CarbonInterface $occurredAt,
+        array $acknowledgedWarnings = [],
     ): ManifestItem {
         return DB::transaction(function () use (
             $manifest,
@@ -29,6 +32,7 @@ class LoadHandlingUnit
             $loader,
             $clientEventId,
             $occurredAt,
+            $acknowledgedWarnings,
         ): ManifestItem {
             $lockedManifest = Manifest::query()
                 ->lockForUpdate()
@@ -57,11 +61,17 @@ class LoadHandlingUnit
             }
             $consignment = $lockedHandlingUnit->consignment()->firstOrFail();
 
-            $servesDestination = $lockedManifest->destinations()
+            $destinationMismatch = ! $lockedManifest->destinations()
                 ->whereKey($consignment->destination_depot_id)
                 ->exists();
 
-            if (! $servesDestination) {
+            $destinationMismatchAcknowledged = in_array(
+                LoadWarningType::DestinationMismatch,
+                $acknowledgedWarnings,
+                true,
+            );
+
+            if ($destinationMismatch && ! $destinationMismatchAcknowledged) {
                 $palletDestination = Depot::query()
                     ->findOrFail($consignment->destination_depot_id);
 
@@ -81,6 +91,20 @@ class LoadHandlingUnit
 
             $lockedHandlingUnit->current_status = HandlingUnitStatus::Loaded;
             $lockedHandlingUnit->save();
+
+            if ($destinationMismatch) {
+                $acknowledgement = new WarningAcknowledgement;
+                $acknowledgement->warning_type = LoadWarningType::DestinationMismatch;
+                $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
+                $acknowledgement->manifest_id = $lockedManifest->getKey();
+                $acknowledgement->acknowledged_by = $loader->getKey();
+                $acknowledgement->client_event_id = $clientEventId;
+                $acknowledgement->acknowledged_at = $occurredAt;
+                $acknowledgement->metadata = [
+                    'pallet_destination_id' => $consignment->destination_depot_id,
+                ];
+                $acknowledgement->save();
+            }
 
             return $manifestItem;
         });
