@@ -55,10 +55,41 @@ class LoadHandlingUnit
                     return $existingAssignment;
                 }
 
-                throw new HandlingUnitAlreadyAssigned(
-                    existingAssignment: $existingAssignment,
-                    selectedManifest: $lockedManifest,
+                $acknowledged = in_array(
+                    LoadWarningType::AlreadyAssigned,
+                    $acknowledgedWarnings,
+                    true,
                 );
+
+                if (! $acknowledged) {
+                    throw new HandlingUnitAlreadyAssigned(
+                        existingAssignment: $existingAssignment,
+                        selectedManifest: $lockedManifest,
+                    );
+                }
+
+                $originalManifestId = $existingAssignment->manifest_id;
+
+                $existingAssignment->manifest_id = $lockedManifest->getKey();
+                $existingAssignment->loaded_by = $loader->getKey();
+                $existingAssignment->client_event_id = $clientEventId;
+                $existingAssignment->loaded_at = $occurredAt;
+                $existingAssignment->save();
+
+                $acknowledgement = new WarningAcknowledgement;
+                $acknowledgement->warning_type = LoadWarningType::AlreadyAssigned;
+                $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
+                $acknowledgement->manifest_id = $lockedManifest->getKey();
+                $acknowledgement->conflicting_manifest_id = $originalManifestId;
+                $acknowledgement->acknowledged_by = $loader->getKey();
+                $acknowledgement->client_event_id = $clientEventId;
+                $acknowledgement->acknowledged_at = $occurredAt;
+                $acknowledgement->save();
+
+                $lockedHandlingUnit->current_status = HandlingUnitStatus::Loaded;
+                $lockedHandlingUnit->save();
+
+                return $existingAssignment;
             }
             $consignment = $lockedHandlingUnit->consignment()->firstOrFail();
 

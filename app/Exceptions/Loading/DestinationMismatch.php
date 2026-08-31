@@ -13,7 +13,7 @@ class DestinationMismatch extends RuntimeException
         public readonly Manifest $selectedManifest,
     ) {
         parent::__construct(
-            "Pallet destination {$palletDestination->code} is not erved by manifest {$selectedManifest->manifest_number}.",
+            "Pallet destination {$palletDestination->code} is not served by manifest {$selectedManifest->manifest_number}.",
         );
     }
 }

@@ -15,7 +15,7 @@ class ConsignmentSplit extends RuntimeException
         public readonly Manifest $selectedManifest,
     ) {
         parent::__construct(
-            "Consignment {$consignment->connote_number} is alreadypartially loaded on manifest "
+            "Consignment {$consignment->connote_number} is already partially loaded on manifest "
             .$existingAssignment->manifest->manifest_number.'.'
         );
     }

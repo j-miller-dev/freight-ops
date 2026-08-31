@@ -3,6 +3,7 @@
 use App\Actions\Loading\LoadHandlingUnit;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
+use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
@@ -15,7 +16,6 @@ use App\Models\User;
 use App\Models\WarningAcknowledgement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
-use App\Exceptions\Loading\ConsignmentSplit;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -309,17 +309,16 @@ it('loads a wrong-destination pallet when the warning is acknowledged', function
 it('requires acknowledgement when another pallet from the consignment is loaded elsewhere', function () {
     /**   The warning should contain:
 
-    * - Consignment number
-    * - Total pallet count
-    * - Count already loaded elsewhere
-    * - Existing manifest number
-    * - Current manifest pallet count
-    * - Warning type such as ConsignmentSplit
-    */
-
+     * - Consignment number
+     * - Total pallet count
+     * - Count already loaded elsewhere
+     * - Existing manifest number
+     * - Current manifest pallet count
+     * - Warning type such as ConsignmentSplit
+     */
     $destination = Depot::factory()->create([
-         'code' => 'SYD02',
-     ]);
+        'code' => 'SYD02',
+    ]);
 
     $manifests = Manifest::factory()->count(2)->create([
         'status' => 'open',
@@ -338,7 +337,7 @@ it('requires acknowledgement when another pallet from the consignment is loaded 
 
     $consignment = Consignment::factory()->create([
         'destination_depot_id' => $destination->getKey(),
-    'item_count' => 2,
+        'item_count' => 2,
     ]);
 
     $pallets = HandlingUnit::factory()
@@ -360,7 +359,7 @@ it('requires acknowledgement when another pallet from the consignment is loaded 
         occurredAt: now()->subMinute(),
     );
 
-    expect(fn () =>   $action->handle(
+    expect(fn () => $action->handle(
         manifest: $selectedManifest,
         handlingUnit: $palletBeingScanned,
         loader: $loader,
@@ -427,4 +426,65 @@ it('loads a split consignment pallet when the warning is acknowledged', function
         ->and($consignment->loadedCount())->toBe(2)
         ->and($acknowledgement->manifest->is($selectedManifest))->toBeTrue()
         ->and($acknowledgement->handlingUnit->is($pallets->last()))->toBeTrue();
+});
+
+it('moves an assigned pallet to another manifest when acknowledged', function () {
+    $destination = Depot::factory()->create();
+
+    $manifests = Manifest::factory()->count(2)->create([
+        'status' => 'open',
+    ]);
+
+    $originalManifest = $manifests->first();
+    $selectedManifest = $manifests->last();
+
+    $originalManifest->destinations()->attach($destination, [
+        'is_primary' => true,
+    ]);
+
+    $selectedManifest->destinations()->attach($destination, [
+        'is_primary' => true,
+    ]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 1,
+    ]);
+
+    $pallet = HandlingUnit::factory()
+        ->for($consignment)
+        ->create();
+
+    $loader = User::factory()->create();
+    $action = app(LoadHandlingUnit::class);
+
+    $originalAssignment = $action->handle(
+        manifest: $originalManifest,
+        handlingUnit: $pallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinute(),
+    );
+
+    $movedAssignment = $action->handle(
+        manifest: $selectedManifest,
+        handlingUnit: $pallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now(),
+        acknowledgedWarnings: [
+            LoadWarningType::AlreadyAssigned,
+        ],
+    );
+
+    $acknowledgement = WarningAcknowledgement::query()
+        ->where('warning_type', LoadWarningType::AlreadyAssigned)
+        ->sole();
+
+    expect($movedAssignment->getKey())->toBe($originalAssignment->getKey())
+        ->and($movedAssignment->manifest->is($selectedManifest))->toBeTrue()
+        ->and(ManifestItem::query()->count())->toBe(1)
+        ->and($acknowledgement->conflictingManifest->is($originalManifest))->toBeTrue()
+        ->and($acknowledgement->manifest->is($selectedManifest))->toBeTrue()
+        ->and($acknowledgement->handlingUnit->is($pallet))->toBeTrue();
 });
