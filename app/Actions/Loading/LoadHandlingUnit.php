@@ -2,6 +2,7 @@
 
 namespace App\Actions\Loading;
 
+use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\ConsignmentSplit;
@@ -12,6 +13,7 @@ use App\Models\Depot;
 use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
+use App\Models\OperationalEvent;
 use App\Models\User;
 use App\Models\WarningAcknowledgement;
 use Carbon\CarbonInterface;
@@ -88,6 +90,14 @@ class LoadHandlingUnit
 
                 $lockedHandlingUnit->current_status = HandlingUnitStatus::Loaded;
                 $lockedHandlingUnit->save();
+
+                $this->recordLoadedEvent(
+                    handlingUnit: $lockedHandlingUnit,
+                    manifest: $lockedManifest,
+                    loader: $loader,
+                    clientEventId: $clientEventId,
+                    occurredAt: $occurredAt,
+                );
 
                 return $existingAssignment;
             }
@@ -170,6 +180,14 @@ class LoadHandlingUnit
             $lockedHandlingUnit->current_status = HandlingUnitStatus::Loaded;
             $lockedHandlingUnit->save();
 
+            $this->recordLoadedEvent(
+                handlingUnit: $lockedHandlingUnit,
+                manifest: $lockedManifest,
+                loader: $loader,
+                clientEventId: $clientEventId,
+                occurredAt: $occurredAt,
+            );
+
             if ($destinationMismatch) {
                 $acknowledgement = new WarningAcknowledgement;
                 $acknowledgement->warning_type = LoadWarningType::DestinationMismatch;
@@ -186,5 +204,26 @@ class LoadHandlingUnit
 
             return $manifestItem;
         });
+    }
+
+    private function recordLoadedEvent(
+        HandlingUnit $handlingUnit,
+        Manifest $manifest,
+        User $loader,
+        string $clientEventId,
+        CarbonInterface $occurredAt,
+    ): void {
+        $event = new OperationalEvent;
+        $event->client_event_id = $clientEventId;
+        $event->handling_unit_id = $handlingUnit->getKey();
+        $event->actor_id = $loader->getKey();
+        $event->event_type = EventType::Loaded;
+        $event->occurred_at = $occurredAt;
+        $event->received_at = now();
+        $event->metadata = [
+            'manifest_id' => $manifest->getKey(),
+            'manifest_number' => $manifest->manifest_number,
+        ];
+        $event->save();
     }
 }

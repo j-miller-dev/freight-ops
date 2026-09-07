@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Loading\LoadHandlingUnit;
+use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\ConsignmentSplit;
@@ -12,6 +13,7 @@ use App\Models\Depot;
 use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
+use App\Models\OperationalEvent;
 use App\Models\User;
 use App\Models\WarningAcknowledgement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -138,6 +140,7 @@ it('returns the existing assignment when the same pallet is scanned again', func
     );
 
     expect(ManifestItem::query()->count())->toBe(1)
+        ->and(OperationalEvent::query()->count())->toBe(1)
         ->and($duplicateResult->is($originalAssignment))->toBeTrue()
         ->and($duplicateResult->loader->is($firstLoader))->toBeTrue();
 });
@@ -484,7 +487,42 @@ it('moves an assigned pallet to another manifest when acknowledged', function ()
     expect($movedAssignment->getKey())->toBe($originalAssignment->getKey())
         ->and($movedAssignment->manifest->is($selectedManifest))->toBeTrue()
         ->and(ManifestItem::query()->count())->toBe(1)
+        ->and(OperationalEvent::query()->count())->toBe(2)
         ->and($acknowledgement->conflictingManifest->is($originalManifest))->toBeTrue()
         ->and($acknowledgement->manifest->is($selectedManifest))->toBeTrue()
         ->and($acknowledgement->handlingUnit->is($pallet))->toBeTrue();
+});
+
+it('records an operations event when a pallet is loaded', function () {
+    $destination = Depot::factory()->create();
+    $manifest = Manifest::factory()->create(['status' => 'open']);
+    $manifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 1,
+    ]);
+    $pallet = HandlingUnit::factory()->for($consignment)->create();
+    $loader = User::factory()->create();
+    $clientEventId = (string) Str::uuid();
+    $occurredAt = now()->subMinute();
+
+    app(LoadHandlingUnit::class)->handle(
+        manifest: $manifest,
+        handlingUnit: $pallet,
+        loader: $loader,
+        clientEventId: $clientEventId,
+        occurredAt: $occurredAt,
+    );
+
+    $event = OperationalEvent::query()->sole();
+
+    expect($event->event_type)->toBe(EventType::Loaded)
+        ->and($event->handlingUnit->is($pallet))->toBeTrue()
+        ->and($event->actor->is($loader))->toBeTrue()
+        ->and($event->client_event_id)->toBe($clientEventId)
+        ->and($event->metadata['manifest_id'])->toBe($manifest->getKey())
+        ->and($event->metadata['manifest_number'])->toBe($manifest->manifest_number)
+        ->and($event->occurred_at->toDateTimeString())
+        ->toBe($occurredAt->toDateTimeString());
 });
