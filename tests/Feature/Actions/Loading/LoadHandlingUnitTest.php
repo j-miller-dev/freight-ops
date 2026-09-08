@@ -371,6 +371,68 @@ it('requires acknowledgement when another pallet from the consignment is loaded 
     ))->toThrow(ConsignmentSplit::class);
 });
 
+it('groups split-consignment conflicts across all other manifests', function () {
+    $destination = Depot::factory()->create();
+    $manifests = Manifest::factory()->count(3)->create(['status' => 'open']);
+
+    foreach ($manifests as $manifest) {
+        $manifest->destinations()->attach($destination, ['is_primary' => true]);
+    }
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 4,
+    ]);
+    $pallets = HandlingUnit::factory()->count(4)->for($consignment)->create();
+    $loader = User::factory()->create();
+    $action = app(LoadHandlingUnit::class);
+
+    $action->handle(
+        manifest: $manifests[0],
+        handlingUnit: $pallets[0],
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinutes(3),
+    );
+    $action->handle(
+        manifest: $manifests[0],
+        handlingUnit: $pallets[1],
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinutes(2),
+    );
+    $action->handle(
+        manifest: $manifests[1],
+        handlingUnit: $pallets[2],
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinute(),
+        acknowledgedWarnings: [LoadWarningType::ConsignmentSplit],
+    );
+
+    $exception = null;
+
+    try {
+        $action->handle(
+            manifest: $manifests[2],
+            handlingUnit: $pallets[3],
+            loader: $loader,
+            clientEventId: (string) Str::uuid(),
+            occurredAt: now(),
+        );
+    } catch (ConsignmentSplit $caughtException) {
+        $exception = $caughtException;
+    }
+
+    $summary = $exception?->conflictsByManifest();
+
+    expect($exception)->not->toBeNull()
+        ->and($exception->conflictingAssignments)->toHaveCount(3)
+        ->and($summary)->toHaveCount(2)
+        ->and($summary->get($manifests[0]->getKey())['pallet_count'])->toBe(2)
+        ->and($summary->get($manifests[1]->getKey())['pallet_count'])->toBe(1);
+});
+
 it('loads a split consignment pallet when the warning is acknowledged', function () {
     $destination = Depot::factory()->create();
 
@@ -428,7 +490,13 @@ it('loads a split consignment pallet when the warning is acknowledged', function
     expect($loadedPallet->manifest->is($selectedManifest))->toBeTrue()
         ->and($consignment->loadedCount())->toBe(2)
         ->and($acknowledgement->manifest->is($selectedManifest))->toBeTrue()
-        ->and($acknowledgement->handlingUnit->is($pallets->last()))->toBeTrue();
+        ->and($acknowledgement->handlingUnit->is($pallets->last()))->toBeTrue()
+        ->and($acknowledgement->metadata['loaded_elsewhere_count'])->toBe(1)
+        ->and($acknowledgement->metadata['selected_manifest_pallet_count_after_scan'])->toBe(1)
+        ->and($acknowledgement->metadata['conflicting_manifests'][0]['manifest_number'])
+        ->toBe($previousManifest->manifest_number)
+        ->and($acknowledgement->metadata['conflicting_manifests'][0]['pallet_count'])
+        ->toBe(1);
 });
 
 it('moves an assigned pallet to another manifest when acknowledged', function () {

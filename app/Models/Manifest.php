@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Manifest extends Model
 {
@@ -28,6 +29,14 @@ class Manifest extends Model
             'manifest_id',
             'destination_depot_id',
         )->withPivot('is_primary');
+    }
+
+    /**
+     * @return HasMany<ManifestItem, $this>
+     */
+    public function manifestItems(): HasMany
+    {
+        return $this->hasMany(ManifestItem::class);
     }
 
     /**

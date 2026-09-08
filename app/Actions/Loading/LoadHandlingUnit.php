@@ -123,12 +123,12 @@ class LoadHandlingUnit
                 );
             }
 
-            $existingConsignmentAssignment = $consignment->manifestItems()
+            $conflictingAssignments = $consignment->manifestItems()
                 ->where('manifest_items.manifest_id', '!=', $lockedManifest->getKey())
                 ->with('manifest')
-                ->first();
+                ->get();
 
-            $consignmentSplit = $existingConsignmentAssignment !== null;
+            $consignmentSplit = $conflictingAssignments->isNotEmpty();
 
             $consignmentSplitAcknowledged = in_array(
                 LoadWarningType::ConsignmentSplit,
@@ -139,10 +139,12 @@ class LoadHandlingUnit
             if ($consignmentSplit && ! $consignmentSplitAcknowledged) {
                 throw new ConsignmentSplit(
                     consignment: $consignment,
-                    existingAssignment: $existingConsignmentAssignment,
+                    conflictingAssignments: $conflictingAssignments,
                     selectedManifest: $lockedManifest,
                 );
             }
+
+            $selectedManifestPalletCount = $lockedManifest->manifestItems()->count();
 
             $manifestItem = new ManifestItem;
             $manifestItem->manifest_id = $lockedManifest->getKey();
@@ -158,7 +160,7 @@ class LoadHandlingUnit
                 $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
                 $acknowledgement->manifest_id = $lockedManifest->getKey();
                 $acknowledgement->conflicting_manifest_id =
-                    $existingConsignmentAssignment->manifest_id;
+                    $conflictingAssignments->first()->manifest_id;
                 $acknowledgement->acknowledged_by = $loader->getKey();
                 $acknowledgement->client_event_id = $clientEventId;
                 $acknowledgement->acknowledged_at = $occurredAt;
@@ -166,13 +168,18 @@ class LoadHandlingUnit
                     'consignment_id' => $consignment->getKey(),
                     'connote_number' => $consignment->connote_number,
                     'total_pallet_count' => $consignment->item_count,
-                    'loaded_elsewhere_count' => $consignment->manifestItems()
-                        ->where(
-                            'manifest_items.manifest_id',
-                            $existingConsignmentAssignment->manifest_id,
-                        )
-                        ->count(),
-                    'existing_manifest_number' => $existingConsignmentAssignment->manifest->manifest_number,
+                    'loaded_elsewhere_count' => $conflictingAssignments->count(),
+                    'selected_manifest_pallet_count' => $selectedManifestPalletCount,
+                    'selected_manifest_pallet_count_after_scan' => $selectedManifestPalletCount + 1,
+                    'conflicting_manifests' => $conflictingAssignments
+                        ->groupBy('manifest_id')
+                        ->map(fn ($assignments): array => [
+                            'manifest_id' => $assignments->first()->manifest_id,
+                            'manifest_number' => $assignments->first()->manifest->manifest_number,
+                            'pallet_count' => $assignments->count(),
+                        ])
+                        ->values()
+                        ->all(),
                 ];
                 $acknowledgement->save();
             }
