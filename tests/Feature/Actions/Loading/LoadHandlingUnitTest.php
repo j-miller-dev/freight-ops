@@ -4,6 +4,7 @@ use App\Actions\Loading\LoadHandlingUnit;
 use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
+use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
@@ -143,6 +144,75 @@ it('returns the existing assignment when the same pallet is scanned again', func
         ->and(OperationalEvent::query()->count())->toBe(1)
         ->and($duplicateResult->is($originalAssignment))->toBeTrue()
         ->and($duplicateResult->loader->is($firstLoader))->toBeTrue();
+});
+
+it('returns the original assignment when a client event is retried', function () {
+    $destination = Depot::factory()->create();
+    $manifest = Manifest::factory()->create(['status' => 'open']);
+    $manifest->destinations()->attach($destination, ['is_primary' => true]);
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 1,
+    ]);
+    $pallet = HandlingUnit::factory()->for($consignment)->create();
+    $loader = User::factory()->create();
+    $clientEventId = (string) Str::uuid();
+    $occurredAt = now()->subMinute();
+    $action = app(LoadHandlingUnit::class);
+
+    $originalAssignment = $action->handle(
+        manifest: $manifest,
+        handlingUnit: $pallet,
+        loader: $loader,
+        clientEventId: $clientEventId,
+        occurredAt: $occurredAt,
+    );
+
+    $retriedAssignment = $action->handle(
+        manifest: $manifest,
+        handlingUnit: $pallet,
+        loader: $loader,
+        clientEventId: $clientEventId,
+        occurredAt: $occurredAt,
+    );
+
+    expect($retriedAssignment->is($originalAssignment))->toBeTrue()
+        ->and(ManifestItem::query()->count())->toBe(1)
+        ->and(OperationalEvent::query()->count())->toBe(1);
+});
+
+it('rejects reusing a client event for a different loading operation', function () {
+    $destination = Depot::factory()->create();
+    $manifests = Manifest::factory()->count(2)->create(['status' => 'open']);
+    $manifests->each(fn (Manifest $manifest) => $manifest->destinations()->attach($destination, ['is_primary' => true])
+    );
+    $consignments = Consignment::factory()->count(2)->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 1,
+    ]);
+    $pallets = $consignments->map(fn (Consignment $consignment) => HandlingUnit::factory()->for($consignment)->create()
+    );
+    $loader = User::factory()->create();
+    $clientEventId = (string) Str::uuid();
+    $action = app(LoadHandlingUnit::class);
+
+    $action->handle(
+        manifest: $manifests->first(),
+        handlingUnit: $pallets->first(),
+        loader: $loader,
+        clientEventId: $clientEventId,
+        occurredAt: now(),
+    );
+
+    expect(fn () => $action->handle(
+        manifest: $manifests->last(),
+        handlingUnit: $pallets->last(),
+        loader: $loader,
+        clientEventId: $clientEventId,
+        occurredAt: now(),
+    ))->toThrow(ClientEventConflict::class)
+        ->and(ManifestItem::query()->count())->toBe(1)
+        ->and(OperationalEvent::query()->count())->toBe(1);
 });
 
 it('reports a conflict when the pallet belongs to another manifest', function () {

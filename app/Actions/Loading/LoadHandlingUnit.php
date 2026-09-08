@@ -5,6 +5,7 @@ namespace App\Actions\Loading;
 use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
+use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
@@ -37,6 +38,30 @@ class LoadHandlingUnit
             $occurredAt,
             $acknowledgedWarnings,
         ): ManifestItem {
+            $processedEvent = OperationalEvent::query()
+                ->where('client_event_id', $clientEventId)
+                ->first();
+
+            if ($processedEvent !== null) {
+                $eventManifestId = $processedEvent->metadata['manifest_id'] ?? null;
+
+                if (
+                    (string) $processedEvent->handling_unit_id !== (string) $handlingUnit->getKey()
+                    || (string) $eventManifestId !== (string) $manifest->getKey()
+                ) {
+                    throw new ClientEventConflict(
+                        existingEvent: $processedEvent,
+                        handlingUnitId: (string) $handlingUnit->getKey(),
+                        manifestId: (string) $manifest->getKey(),
+                    );
+                }
+
+                return ManifestItem::query()
+                    ->where('handling_unit_id', $handlingUnit->getKey())
+                    ->where('manifest_id', $manifest->getKey())
+                    ->firstOrFail();
+            }
+
             $lockedManifest = Manifest::query()
                 ->lockForUpdate()
                 ->findOrFail($manifest->getKey());
