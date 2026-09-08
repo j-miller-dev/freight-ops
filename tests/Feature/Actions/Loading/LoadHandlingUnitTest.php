@@ -607,11 +607,12 @@ it('moves an assigned pallet to another manifest when acknowledged', function ()
         occurredAt: now()->subMinute(),
     );
 
+    $moveClientEventId = (string) Str::uuid();
     $movedAssignment = $action->handle(
         manifest: $selectedManifest,
         handlingUnit: $pallet,
         loader: $loader,
-        clientEventId: (string) Str::uuid(),
+        clientEventId: $moveClientEventId,
         occurredAt: now(),
         acknowledgedWarnings: [
             LoadWarningType::AlreadyAssigned,
@@ -621,11 +622,18 @@ it('moves an assigned pallet to another manifest when acknowledged', function ()
     $acknowledgement = WarningAcknowledgement::query()
         ->where('warning_type', LoadWarningType::AlreadyAssigned)
         ->sole();
+    $movedEvent = OperationalEvent::query()
+        ->where('client_event_id', $moveClientEventId)
+        ->sole();
 
     expect($movedAssignment->getKey())->toBe($originalAssignment->getKey())
         ->and($movedAssignment->manifest->is($selectedManifest))->toBeTrue()
         ->and(ManifestItem::query()->count())->toBe(1)
         ->and(OperationalEvent::query()->count())->toBe(2)
+        ->and($movedEvent->event_type)->toBe(EventType::Moved)
+        ->and($movedEvent->metadata['from_manifest_id'])->toBe($originalManifest->getKey())
+        ->and($movedEvent->metadata['from_manifest_number'])->toBe($originalManifest->manifest_number)
+        ->and($movedEvent->metadata['manifest_id'])->toBe($selectedManifest->getKey())
         ->and($acknowledgement->conflictingManifest->is($originalManifest))->toBeTrue()
         ->and($acknowledgement->manifest->is($selectedManifest))->toBeTrue()
         ->and($acknowledgement->handlingUnit->is($pallet))->toBeTrue();

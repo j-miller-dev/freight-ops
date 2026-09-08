@@ -96,12 +96,14 @@ class LoadHandlingUnit
                 }
 
                 $originalManifestId = $existingAssignment->manifest_id;
+                $originalManifestNumber = $existingAssignment->manifest->manifest_number;
 
                 $existingAssignment->manifest_id = $lockedManifest->getKey();
                 $existingAssignment->loaded_by = $loader->getKey();
                 $existingAssignment->client_event_id = $clientEventId;
                 $existingAssignment->loaded_at = $occurredAt;
                 $existingAssignment->save();
+                $existingAssignment->setRelation('manifest', $lockedManifest);
 
                 $acknowledgement = new WarningAcknowledgement;
                 $acknowledgement->warning_type = LoadWarningType::AlreadyAssigned;
@@ -122,6 +124,11 @@ class LoadHandlingUnit
                     loader: $loader,
                     clientEventId: $clientEventId,
                     occurredAt: $occurredAt,
+                    eventType: EventType::Moved,
+                    metadata: [
+                        'from_manifest_id' => $originalManifestId,
+                        'from_manifest_number' => $originalManifestNumber,
+                    ],
                 );
 
                 return $existingAssignment;
@@ -244,18 +251,20 @@ class LoadHandlingUnit
         User $loader,
         string $clientEventId,
         CarbonInterface $occurredAt,
+        EventType $eventType = EventType::Loaded,
+        array $metadata = [],
     ): void {
         $event = new OperationalEvent;
         $event->client_event_id = $clientEventId;
         $event->handling_unit_id = $handlingUnit->getKey();
         $event->actor_id = $loader->getKey();
-        $event->event_type = EventType::Loaded;
+        $event->event_type = $eventType;
         $event->occurred_at = $occurredAt;
         $event->received_at = now();
-        $event->metadata = [
+        $event->metadata = array_merge([
             'manifest_id' => $manifest->getKey(),
             'manifest_number' => $manifest->manifest_number,
-        ];
+        ], $metadata);
         $event->save();
     }
 }
