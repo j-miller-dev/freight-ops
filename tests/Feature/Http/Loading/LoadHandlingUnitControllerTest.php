@@ -157,3 +157,28 @@ it('rejects reusing a client event for a different HTTP scan', function () {
     expect(ManifestItem::query()->count())->toBe(1)
         ->and(OperationalEvent::query()->count())->toBe(1);
 });
+
+it('returns previous assignment details before allowing an override', function () {
+    $loader = User::factory()->create(['name' => 'Original Loader']);
+    $destination = Depot::factory()->create();
+    $firstManifest = loadingManifest($destination);
+    $secondManifest = loadingManifest($destination);
+    $pallet = loadingPallet($destination);
+
+    $this->actingAs($loader)->postJson(
+        route('loading.scan', $firstManifest),
+        scanPayload($pallet),
+    )->assertCreated();
+
+    $response = $this->actingAs(User::factory()->create(['name' => 'Current Loader']))
+        ->postJson(
+            route('loading.scan', $secondManifest),
+            scanPayload($pallet),
+        );
+
+    $response->assertStatus(409)
+        ->assertJsonPath('error.code', 'handling_unit_already_assigned')
+        ->assertJsonPath('error.details.previous_manifest_number', $firstManifest->manifest_number)
+        ->assertJsonPath('error.details.previous_loader_name', 'Original Loader')
+        ->assertJsonPath('error.details.selected_manifest_number', $secondManifest->manifest_number);
+});

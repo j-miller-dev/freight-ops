@@ -65,6 +65,17 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'handling_unit_already_assigned',
                     'message' => $exception->getMessage(),
                     'status' => 409,
+                    'details' => (function () use ($exception): array {
+                        $assignment = $exception->existingAssignment
+                            ->loadMissing(['manifest', 'loader']);
+
+                        return [
+                            'previous_manifest_number' => $assignment->manifest->manifest_number,
+                            'previous_loader_name' => $assignment->loader->name,
+                            'previous_loaded_at' => $assignment->loaded_at?->toISOString(),
+                            'selected_manifest_number' => $exception->selectedManifest->manifest_number,
+                        ];
+                    })(),
                 ],
 
                 $exception instanceof ConsignmentSplit => [

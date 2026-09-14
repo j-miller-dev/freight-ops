@@ -18,6 +18,8 @@ type Manifest = {
 
 type ScanResult = {
     barcode: string;
+    loader?: string;
+    scannedAt?: string;
     connote_number?: string;
     piece_number?: number;
     progress?: {
@@ -36,13 +38,18 @@ type PendingScan = {
 type WarningPrompt = PendingScan & {
     code: 'destination_mismatch' | 'consignment_split' | 'already_assigned';
     message: string;
+    details?: Record<string, unknown>;
 };
 
 type Props = {
+    loader: {
+        id: number;
+        name: string;
+    };
     destinations: Destination[];
 };
 
-export default function Loading({ destinations }: Props) {
+export default function Loading({ loader, destinations }: Props) {
     const [destinationId, setDestinationId] = useState('');
     const [manifestId, setManifestId] = useState('');
     const [barcode, setBarcode] = useState('');
@@ -160,6 +167,7 @@ export default function Loading({ destinations }: Props) {
                         message:
                             json.error.message ??
                             'This scan needs confirmation.',
+                        details: json.error.details,
                     });
                     return;
                 }
@@ -173,6 +181,8 @@ export default function Loading({ destinations }: Props) {
             setWarningPrompt(null);
             setScanResult({
                 barcode: scan.barcode,
+                loader: json.data.loader?.name,
+                scannedAt: json.data.loaded_at,
                 progress: json.data.progress,
             });
         } catch (scanError) {
@@ -341,6 +351,11 @@ export default function Loading({ destinations }: Props) {
                             </p>
                         </div>
 
+                        <div className="rounded-md bg-muted p-3 text-sm">
+                            <span className="font-medium">Loader:</span>{' '}
+                            {loader.name}
+                        </div>
+
                         <div className="flex gap-2">
                             <input
                                 className="min-w-0 flex-1 rounded-md border p-3"
@@ -390,6 +405,16 @@ export default function Loading({ destinations }: Props) {
                             <div className="space-y-2 rounded-md bg-green-50 p-3 text-sm text-green-800">
                                 <p>Loaded {scanResult.barcode} successfully.</p>
 
+                                {scanResult.loader && scanResult.scannedAt && (
+                                    <p>
+                                        Scanned by {scanResult.loader} at{' '}
+                                        {new Date(
+                                            scanResult.scannedAt,
+                                        ).toLocaleString()}
+                                        .
+                                    </p>
+                                )}
+
                                 {scanResult.progress && (
                                     <p className="font-medium">
                                         {scanResult.progress.loaded_count} of{' '}
@@ -415,6 +440,58 @@ export default function Loading({ destinations }: Props) {
                             <p className="mt-1 text-sm">
                                 {warningPrompt.message}
                             </p>
+
+                            {warningPrompt.code === 'already_assigned' &&
+                                warningPrompt.details && (
+                                    <dl className="space-y-1 text-sm">
+                                        <div>
+                                            <dt className="inline font-medium">
+                                                Previous manifest:{' '}
+                                            </dt>
+                                            <dd className="inline">
+                                                {String(
+                                                    warningPrompt.details
+                                                        .previous_manifest_number,
+                                                )}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="inline font-medium">
+                                                Previous loader:{' '}
+                                            </dt>
+                                            <dd className="inline">
+                                                {String(
+                                                    warningPrompt.details
+                                                        .previous_loader_name,
+                                                )}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="inline font-medium">
+                                                Previous scan:{' '}
+                                            </dt>
+                                            <dd className="inline">
+                                                {new Date(
+                                                    String(
+                                                        warningPrompt.details
+                                                            .previous_loaded_at,
+                                                    ),
+                                                ).toLocaleString()}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="inline font-medium">
+                                                Move to:{' '}
+                                            </dt>
+                                            <dd className="inline">
+                                                {String(
+                                                    warningPrompt.details
+                                                        .selected_manifest_number,
+                                                )}
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                )}
                         </div>
 
                         <div className="flex gap-2">
@@ -424,7 +501,12 @@ export default function Loading({ destinations }: Props) {
                                 onClick={confirmWarning}
                                 disabled={scanning}
                             >
-                                {scanning ? 'Confirming…' : 'Acknowledge and load'}
+                                {scanning
+                                    ? 'Confirming…'
+                                    : warningPrompt.code ===
+                                        'already_assigned'
+                                      ? 'Override and load here'
+                                      : 'Acknowledge and load'}
                             </button>
                             <button
                                 type="button"

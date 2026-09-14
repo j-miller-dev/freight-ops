@@ -46,6 +46,10 @@ class LoadHandlingUnitController extends Controller
                 'handling_unit_id' => $manifestItem->handling_unit_id,
                 'barcode' => $handlingUnit->barcode,
                 'loaded_at' => $manifestItem->loaded_at?->toISOString(),
+                'loader' => [
+                    'id' => $request->user()->getKey(),
+                    'name' => $request->user()->name,
+                ],
                 'progress' => [
                     'loaded_count' => $loadedCount,
                     'total_count' => $totalCount,
