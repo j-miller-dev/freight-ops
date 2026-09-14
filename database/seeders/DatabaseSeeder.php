@@ -36,10 +36,11 @@ class DatabaseSeeder extends Seeder
         $todayBrisbane = $this->manifest($melbourne, $brisbane, 'fixture-mel-bne-today', 'MEL-BNE-260913', $today, 'closed');
         $yesterdaySydney = $this->manifest($melbourne, $sydney, 'fixture-mel-syd-yesterday', 'MEL-SYD-260912', $yesterday, 'closed');
 
-        $split = $this->consignment('CN-SPLIT-001', $sydney, 3);
+        $split = $this->consignment('CN-SPLIT-001', $sydney, 4);
         $this->pallet($split, 'PALLET-SPLIT-001', 1, $todaySydney, $loader, 'split-001');
         $this->pallet($split, 'PALLET-SPLIT-002', 2, $todaySydney, $loader, 'split-002');
         $this->pallet($split, 'PALLET-SPLIT-003', 3, $yesterdaySydney, $loader, 'split-003');
+        $this->pallet($split, 'PALLET-SPLIT-004', 4);
 
         $multi = $this->consignment('CN-MULTI-001', $sydney, 4);
         $this->pallet($multi, 'PALLET-MULTI-001', 1, $todaySydney, $loader, 'multi-001');
@@ -49,6 +50,9 @@ class DatabaseSeeder extends Seeder
 
         $wrongDestination = $this->consignment('CN-WRONG-001', $sydney, 1);
         $this->pallet($wrongDestination, 'PALLET-WRONG-001', 1, $todayBrisbane, $loader, 'wrong-destination-001');
+
+        $wrongDestinationPending = $this->consignment('CN-WRONG-002', $brisbane, 1);
+        $this->pallet($wrongDestinationPending, 'PALLET-WRONG-002', 1);
 
         $alreadyLoaded = $this->consignment('CN-LOADED-001', $sydney, 1);
         $this->pallet($alreadyLoaded, 'PALLET-LOADED-001', 1, $todaySydney, $loader, 'loaded-001');
