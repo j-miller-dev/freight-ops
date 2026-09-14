@@ -30,6 +30,15 @@ class LoadHandlingUnitController extends Controller
             acknowledgedWarnings: $request->acknowledgedWarnings(),
         );
 
+        $destinationIds = $manifest->destinations()->pluck('depots.id');
+        $loadedCount = $manifest->manifestItems()->count();
+        $totalCount = HandlingUnit::query()
+            ->whereHas(
+                'consignment',
+                fn ($query) => $query->whereIn('destination_depot_id', $destinationIds),
+            )
+            ->count();
+
         return response()->json([
             'data' => [
                 'manifest_item_id' => $manifestItem->getKey(),
@@ -37,6 +46,10 @@ class LoadHandlingUnitController extends Controller
                 'handling_unit_id' => $manifestItem->handling_unit_id,
                 'barcode' => $handlingUnit->barcode,
                 'loaded_at' => $manifestItem->loaded_at?->toISOString(),
+                'progress' => [
+                    'loaded_count' => $loadedCount,
+                    'total_count' => $totalCount,
+                ],
             ],
         ], 201);
     }

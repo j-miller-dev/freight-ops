@@ -20,6 +20,22 @@ type ScanResult = {
     barcode: string;
     connote_number?: string;
     piece_number?: number;
+    progress?: {
+        loaded_count: number;
+        total_count: number;
+    };
+};
+
+type PendingScan = {
+    barcode: string;
+    clientEventId: string;
+    occurredAt: string;
+    acknowledgedWarnings: string[];
+};
+
+type WarningPrompt = PendingScan & {
+    code: 'destination_mismatch' | 'consignment_split' | 'already_assigned';
+    message: string;
 };
 
 type Props = {
@@ -36,12 +52,15 @@ export default function Loading({ destinations }: Props) {
     const [simulating, setSimulating] = useState(false);
     const [error, setError] = useState('');
     const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+    const [warningPrompt, setWarningPrompt] =
+        useState<WarningPrompt | null>(null);
 
     useEffect(() => {
         setManifestId('');
         setManifests([]);
         setError('');
         setScanResult(null);
+        setWarningPrompt(null);
 
         if (!destinationId) {
             return;
@@ -88,8 +107,8 @@ export default function Loading({ destinations }: Props) {
         return () => controller.abort();
     }, [destinationId]);
 
-    async function scanBarcode(scanBarcode: string) {
-        if (!manifestId || !scanBarcode) {
+    async function submitScan(scan: PendingScan) {
+        if (!manifestId || !scan.barcode) {
             return;
         }
 
@@ -117,9 +136,10 @@ export default function Loading({ destinations }: Props) {
                             : {}),
                     },
                     body: JSON.stringify({
-                        barcode: scanBarcode,
-                        client_event_id: crypto.randomUUID(),
-                        occurred_at: new Date().toISOString(),
+                        barcode: scan.barcode,
+                        client_event_id: scan.clientEventId,
+                        occurred_at: scan.occurredAt,
+                        acknowledged_warnings: scan.acknowledgedWarnings,
                     }),
                 },
             );
@@ -127,17 +147,52 @@ export default function Loading({ destinations }: Props) {
             const json = await response.json();
 
             if (!response.ok) {
+                const warningCodes = [
+                    'destination_mismatch',
+                    'consignment_split',
+                    'already_assigned',
+                ] as const;
+
+                if (warningCodes.includes(json.error?.code)) {
+                    setWarningPrompt({
+                        ...scan,
+                        code: json.error.code,
+                        message:
+                            json.error.message ??
+                            'This scan needs confirmation.',
+                    });
+                    return;
+                }
+
                 throw new Error(
                     json.error?.message ?? 'Unable to load this pallet.',
                 );
             }
 
-            setScanResult({ barcode: scanBarcode });
+            setBarcode('');
+            setWarningPrompt(null);
+            setScanResult({
+                barcode: scan.barcode,
+                progress: json.data.progress,
+            });
         } catch (scanError) {
             setError((scanError as Error).message);
         } finally {
             setScanning(false);
         }
+    }
+
+    function scanBarcode(scanBarcode: string) {
+        if (!scanBarcode) {
+            return;
+        }
+
+        void submitScan({
+            barcode: scanBarcode,
+            clientEventId: crypto.randomUUID(),
+            occurredAt: new Date().toISOString(),
+            acknowledgedWarnings: [],
+        });
     }
 
     async function simulateScan() {
@@ -167,12 +222,26 @@ export default function Loading({ destinations }: Props) {
             }
 
             setBarcode(json.data.barcode);
-            await scanBarcode(json.data.barcode);
+            scanBarcode(json.data.barcode);
         } catch (simulationError) {
             setError((simulationError as Error).message);
         } finally {
             setSimulating(false);
         }
+    }
+
+    function confirmWarning() {
+        if (!warningPrompt) {
+            return;
+        }
+
+        void submitScan({
+            ...warningPrompt,
+            acknowledgedWarnings: [
+                ...warningPrompt.acknowledgedWarnings,
+                warningPrompt.code,
+            ],
+        });
     }
 
     return (
@@ -318,10 +387,54 @@ export default function Loading({ destinations }: Props) {
                         )}
 
                         {scanResult && (
-                            <div className="rounded-md bg-green-50 p-3 text-sm text-green-800">
-                                Loaded {scanResult.barcode} successfully.
+                            <div className="space-y-2 rounded-md bg-green-50 p-3 text-sm text-green-800">
+                                <p>Loaded {scanResult.barcode} successfully.</p>
+
+                                {scanResult.progress && (
+                                    <p className="font-medium">
+                                        {scanResult.progress.loaded_count} of{' '}
+                                        {scanResult.progress.total_count}{' '}
+                                        destination pallets loaded.
+                                    </p>
+                                )}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {warningPrompt && (
+                    <div
+                        className="space-y-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-950"
+                        role="alertdialog"
+                        aria-labelledby="warning-title"
+                    >
+                        <div>
+                            <h2 id="warning-title" className="font-semibold">
+                                Confirm loading warning
+                            </h2>
+                            <p className="mt-1 text-sm">
+                                {warningPrompt.message}
+                            </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                className="rounded-md bg-amber-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+                                onClick={confirmWarning}
+                                disabled={scanning}
+                            >
+                                {scanning ? 'Confirming…' : 'Acknowledge and load'}
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-md border border-amber-700 px-4 py-2 text-sm"
+                                onClick={() => setWarningPrompt(null)}
+                                disabled={scanning}
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
