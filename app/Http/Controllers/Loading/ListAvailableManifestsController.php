@@ -22,11 +22,22 @@ class ListAvailableManifestsController extends Controller
         $destination = Depot::query()->findOrFail($validated['destination_id']);
 
         $manifests = Manifest::query()
-            ->availableForLoading($destination, today()->subDay(), today())
+            ->whereDate('service_date', '>=', today()->subDay())
+            ->whereDate('service_date', '<=', today())
+            ->whereHas(
+                'destinations',
+                fn ($query) => $query->whereKey($destination->getKey()),
+            )
             ->withCount('manifestItems')
             ->orderBy('service_date')
             ->orderBy('manifest_number')
-            ->get();
+            ->get()
+            ->sortBy(fn (Manifest $manifest): array => [
+                $manifest->status === 'open' ? 0 : 1,
+                $manifest->service_date?->toDateString(),
+                $manifest->manifest_number,
+            ])
+            ->values();
 
         return response()->json([
             'data' => $manifests,

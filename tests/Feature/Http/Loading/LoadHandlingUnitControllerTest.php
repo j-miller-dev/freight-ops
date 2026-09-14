@@ -77,6 +77,23 @@ it('returns an unassigned pending pallet for simulated scans', function () {
         ->assertJsonPath('data.connote_number', $pallet->consignment->connote_number);
 });
 
+it('includes closed manifests in the picker with their closed status', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $openManifest = loadingManifest($destination, 'open');
+    $closedManifest = loadingManifest($destination, 'closed');
+
+    $response = $this->actingAs($loader)->getJson(route('loading.manifests', [
+        'destination_id' => $destination->getKey(),
+    ]));
+
+    $response->assertOk()
+        ->assertJsonPath('data.0.id', $openManifest->getKey())
+        ->assertJsonPath('data.0.status', 'open')
+        ->assertJsonPath('data.1.id', $closedManifest->getKey())
+        ->assertJsonPath('data.1.status', 'closed');
+});
+
 it('rejects an invalid scan payload before reaching the action', function () {
     $loader = User::factory()->create();
     $manifest = loadingManifest(Depot::factory()->create());

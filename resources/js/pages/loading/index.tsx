@@ -324,10 +324,13 @@ export default function Loading({ loader, destinations }: Props) {
                                     <option
                                         key={manifest.id}
                                         value={manifest.id}
+                                        disabled={manifest.status !== 'open'}
                                     >
                                         {manifest.manifest_number} —{' '}
                                         {manifest.service_date} —{' '}
-                                        {manifest.manifest_items_count} loaded
+                                        {manifest.status === 'open'
+                                            ? `${manifest.manifest_items_count} loaded`
+                                            : 'Closed'}
                                     </option>
                                 ))}
                             </select>
