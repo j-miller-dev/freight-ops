@@ -64,6 +64,19 @@ it('loads a pallet through the HTTP endpoint', function () {
         ->and(OperationalEvent::query()->count())->toBe(1);
 });
 
+it('returns an unassigned pending pallet for simulated scans', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $manifest = loadingManifest($destination);
+    $pallet = loadingPallet($destination);
+
+    $this->actingAs($loader)
+        ->getJson(route('loading.simulate-scan', $manifest))
+        ->assertOk()
+        ->assertJsonPath('data.barcode', $pallet->barcode)
+        ->assertJsonPath('data.connote_number', $pallet->consignment->connote_number);
+});
+
 it('rejects an invalid scan payload before reaching the action', function () {
     $loader = User::factory()->create();
     $manifest = loadingManifest(Depot::factory()->create());
