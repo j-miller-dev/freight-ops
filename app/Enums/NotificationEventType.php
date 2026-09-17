@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum NotificationEventType: string
+enum NotificationEventType: string implements HasLabel
 {
     case P1Received = 'p1_received';
     case P1Stale = 'p1_stale';
@@ -14,4 +14,20 @@ enum NotificationEventType: string
     case TrailerCutoffWarning = 'trailer_cutoff_warning';
     case RunReady = 'run_ready';
     case ShiftHandover = 'shift_handover';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::P1Received => 'P1 Received',
+            self::P1Stale => 'P1 Stale',
+            self::BayNearCapacity => 'Bay Near Capacity',
+            self::BayFull => 'Bay Full',
+            self::FreightAgeWarning => 'Freight Age Warning',
+            self::FreightAgeCritical => 'Freight Age Critical',
+            self::PriorityPromoted => 'Priority Promoted',
+            self::TrailerCutoffWarning => 'Trailer Cutoff Warning',
+            self::RunReady => 'Run Ready',
+            self::ShiftHandover => 'Shift Handover',
+        };
+    }
 }
