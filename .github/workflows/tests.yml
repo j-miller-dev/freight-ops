@@ -13,6 +13,20 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: true
+          MYSQL_DATABASE: tge
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,6 +47,9 @@ jobs:
 
       - name: Setup Application
         run: composer setup
+
+      - name: Create testing database
+        run: mysql -h 127.0.0.1 -P 3306 -uroot -e "CREATE DATABASE IF NOT EXISTS testing;"
 
       - name: Run CI Checks
         run: composer ci:check
