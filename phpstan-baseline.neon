@@ -1,49 +1,49 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Access to an undefined property App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:\$current_status\.$#'
+			message: '#^Access to an undefined property App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\HandlingUnit\>\:\:\$current_status\.$#'
 			identifier: property.notFound
 			count: 2
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:\$status\.$#'
+			message: '#^Access to an undefined property App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\>\:\:\$status\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:consignment\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\HandlingUnit\>\:\:consignment\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:getKey\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\HandlingUnit\>\:\:getKey\(\)\.$#'
 			identifier: method.notFound
 			count: 5
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:save\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\HandlingUnit\>\:\:save\(\)\.$#'
 			identifier: method.notFound
 			count: 2
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:destinations\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\>\:\:destinations\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:getKey\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\>\:\:getKey\(\)\.$#'
 			identifier: method.notFound
 			count: 7
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:manifestItems\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\>\:\:manifestItems\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
@@ -67,37 +67,37 @@ parameters:
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Parameter \#1 \$manifest of class App\\Exceptions\\Loading\\ManifestNotOpen constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			message: '#^Parameter \#1 \$manifest of class App\\Exceptions\\Loading\\ManifestNotOpen constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\> given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Parameter \$handlingUnit of method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) expects App\\Models\\HandlingUnit, App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\> given\.$#'
+			message: '#^Parameter \$handlingUnit of method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) expects App\\Models\\HandlingUnit, App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\HandlingUnit\> given\.$#'
 			identifier: argument.type
 			count: 2
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Parameter \$manifest of method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			message: '#^Parameter \$manifest of method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\> given\.$#'
 			identifier: argument.type
 			count: 2
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\ConsignmentSplit constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\ConsignmentSplit constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\> given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\DestinationMismatch constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\DestinationMismatch constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\> given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\HandlingUnitAlreadyAssigned constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\HandlingUnitAlreadyAssigned constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Manifest\> given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
@@ -145,7 +145,7 @@ parameters:
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Call to an undefined method App\\Models\\Depot\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Depot\>\:\:getKey\(\)\.$#'
+			message: '#^Call to an undefined method App\\Models\\Depot\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Depot\>\:\:getKey\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: app/Http/Controllers/Loading/ListAvailableManifestsController.php
