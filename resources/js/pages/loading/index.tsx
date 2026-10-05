@@ -1,6 +1,41 @@
 import { Head } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import { CameraIcon, CameraOffIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import AlertError from '@/components/alert-error';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
+import {
+    BarcodeDetectionScanner,
+    isBarcodeDetectionSupported,
+} from '@/lib/barcode-scanner';
+import { cn } from '@/lib/utils';
 
 type Destination = {
     id: string;
@@ -18,11 +53,15 @@ type Manifest = {
 
 type ScanResult = {
     barcode: string;
+    connoteNumber?: string;
+    pieceNumber?: number;
     loader?: string;
     scannedAt?: string;
-    connote_number?: string;
-    piece_number?: number;
     progress?: {
+        loaded_count: number;
+        total_count: number;
+    };
+    consignmentProgress?: {
         loaded_count: number;
         total_count: number;
     };
@@ -49,6 +88,11 @@ type Props = {
     destinations: Destination[];
 };
 
+// Mirrors HandlingUnitStatus::Loaded->color() on the backend, so a loaded
+// pallet reads the same color here as it will everywhere else in the app.
+const LOADED_BADGE_CLASS =
+    'border-transparent bg-yellow-100 text-yellow-900 dark:bg-yellow-500/20 dark:text-yellow-300';
+
 export default function Loading({ loader, destinations }: Props) {
     const [destinationId, setDestinationId] = useState('');
     const [manifestId, setManifestId] = useState('');
@@ -59,16 +103,26 @@ export default function Loading({ loader, destinations }: Props) {
     const [simulating, setSimulating] = useState(false);
     const [error, setError] = useState('');
     const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-    const [warningPrompt, setWarningPrompt] =
-        useState<WarningPrompt | null>(null);
+    const [warningPrompt, setWarningPrompt] = useState<WarningPrompt | null>(
+        null,
+    );
+    const [cameraActive, setCameraActive] = useState(false);
+    const [cameraError, setCameraError] = useState('');
 
-    useEffect(() => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const scannerRef = useRef<BarcodeDetectionScanner | null>(null);
+    const busyRef = useRef(false);
+
+    function selectDestination(value: string) {
+        setDestinationId(value);
         setManifestId('');
         setManifests([]);
         setError('');
         setScanResult(null);
         setWarningPrompt(null);
+    }
 
+    useEffect(() => {
         if (!destinationId) {
             return;
         }
@@ -114,11 +168,55 @@ export default function Loading({ loader, destinations }: Props) {
         return () => controller.abort();
     }, [destinationId]);
 
+    // Camera scanning is tied to a single manifest; switching manifests (or
+    // unmounting) means a deliberate restart rather than silently scanning
+    // the old one.
+    useEffect(() => {
+        return () => stopCamera();
+    }, [manifestId]);
+
+    function stopCamera() {
+        scannerRef.current?.stop();
+        scannerRef.current = null;
+        setCameraActive(false);
+    }
+
+    async function startCamera() {
+        if (!videoRef.current) {
+            return;
+        }
+
+        setCameraError('');
+
+        const scanner = new BarcodeDetectionScanner();
+        scannerRef.current = scanner;
+
+        scanner.onScan((value) => {
+            if (busyRef.current) {
+                return;
+            }
+
+            setBarcode(value);
+            void scanBarcode(value);
+        });
+
+        try {
+            await scanner.start(videoRef.current);
+            setCameraActive(true);
+        } catch {
+            setCameraError(
+                'Camera access was denied or is unavailable. Use manual entry below.',
+            );
+            stopCamera();
+        }
+    }
+
     async function submitScan(scan: PendingScan) {
         if (!manifestId || !scan.barcode) {
             return;
         }
 
+        busyRef.current = true;
         setScanning(true);
         setError('');
         setScanResult(null);
@@ -169,6 +267,7 @@ export default function Loading({ loader, destinations }: Props) {
                             'This scan needs confirmation.',
                         details: json.error.details,
                     });
+
                     return;
                 }
 
@@ -179,16 +278,28 @@ export default function Loading({ loader, destinations }: Props) {
 
             setBarcode('');
             setWarningPrompt(null);
-            setScanResult({
+
+            const result: ScanResult = {
                 barcode: scan.barcode,
+                connoteNumber: json.data.connote_number,
+                pieceNumber: json.data.piece_number,
                 loader: json.data.loader?.name,
                 scannedAt: json.data.loaded_at,
                 progress: json.data.progress,
+                consignmentProgress: json.data.consignment_progress,
+            };
+
+            setScanResult(result);
+            toast.success(`Loaded ${result.connoteNumber ?? result.barcode}`, {
+                description: result.consignmentProgress
+                    ? `${result.consignmentProgress.loaded_count} of ${result.consignmentProgress.total_count} pallets for this consignment loaded.`
+                    : undefined,
             });
         } catch (scanError) {
             setError((scanError as Error).message);
         } finally {
             setScanning(false);
+            busyRef.current = false;
         }
     }
 
@@ -254,6 +365,8 @@ export default function Loading({ loader, destinations }: Props) {
         });
     }
 
+    const selectedManifest = manifests.find((m) => m.id === manifestId);
+
     return (
         <AppLayout>
             <Head title="Loading" />
@@ -266,78 +379,69 @@ export default function Loading({ loader, destinations }: Props) {
                     </p>
                 </div>
 
-                <div>
-                    <label
-                        htmlFor="destination"
-                        className="block text-sm font-medium"
-                    >
-                        Destination
-                    </label>
+                <div className="space-y-2">
+                    <Label htmlFor="destination">Destination</Label>
 
-                    <select
-                        id="destination"
-                        className="mt-2 w-full rounded-md border p-3"
-                        value={destinationId}
-                        onChange={(event) =>
-                            setDestinationId(event.target.value)
-                        }
+                    <Select
+                        value={destinationId || undefined}
+                        onValueChange={selectDestination}
                     >
-                        <option value="">Select a destination</option>
-
-                        {destinations.map((destination) => (
-                            <option key={destination.id} value={destination.id}>
-                                {destination.code} — {destination.name}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger id="destination" className="w-full">
+                            <SelectValue placeholder="Select a destination" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {destinations.map((destination) => (
+                                <SelectItem
+                                    key={destination.id}
+                                    value={destination.id}
+                                >
+                                    {destination.code} — {destination.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 {destinationId && (
-                    <div>
-                        <label
-                            htmlFor="manifest"
-                            className="block text-sm font-medium"
-                        >
-                            Manifest
-                        </label>
+                    <div className="space-y-2">
+                        <Label htmlFor="manifest">Manifest</Label>
 
                         {loading && (
-                            <p className="mt-2 text-sm">Loading manifests…</p>
+                            <p className="text-sm">Loading manifests…</p>
                         )}
 
-                        {error && (
-                            <p className="mt-2 text-sm text-red-600">{error}</p>
-                        )}
+                        {error && <AlertError errors={[error]} />}
 
-                        {!loading && !error && (
-                            <select
-                                id="manifest"
-                                className="mt-2 w-full rounded-md border p-3"
-                                value={manifestId}
-                                onChange={(event) =>
-                                    setManifestId(event.target.value)
-                                }
+                        {!loading && !error && manifests.length > 0 && (
+                            <Select
+                                value={manifestId || undefined}
+                                onValueChange={setManifestId}
                             >
-                                <option value="">Select a manifest</option>
-
-                                {manifests.map((manifest) => (
-                                    <option
-                                        key={manifest.id}
-                                        value={manifest.id}
-                                        disabled={manifest.status !== 'open'}
-                                    >
-                                        {manifest.manifest_number} —{' '}
-                                        {manifest.service_date} —{' '}
-                                        {manifest.status === 'open'
-                                            ? `${manifest.manifest_items_count} loaded`
-                                            : 'Closed'}
-                                    </option>
-                                ))}
-                            </select>
+                                <SelectTrigger id="manifest" className="w-full">
+                                    <SelectValue placeholder="Select a manifest" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {manifests.map((manifest) => (
+                                        <SelectItem
+                                            key={manifest.id}
+                                            value={manifest.id}
+                                            disabled={
+                                                manifest.status !== 'open'
+                                            }
+                                        >
+                                            {manifest.manifest_number} —{' '}
+                                            {manifest.service_date} —{' '}
+                                            {manifest.status === 'open'
+                                                ? `${manifest.manifest_items_count} loaded`
+                                                : 'Closed'}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         )}
 
                         {!loading && !error && manifests.length === 0 && (
-                            <p className="mt-2 text-sm text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                                 No open manifests found for this destination.
                             </p>
                         )}
@@ -345,71 +449,125 @@ export default function Loading({ loader, destinations }: Props) {
                 )}
 
                 {manifestId && (
-                    <div className="space-y-4 rounded-md border p-4">
-                        <div>
-                            <h2 className="font-medium">Scan pallet</h2>
-                            <p className="text-sm text-muted-foreground">
-                                Use a scanner, enter a barcode manually, or
-                                simulate a seeded pallet.
-                            </p>
-                        </div>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Scan pallet</CardTitle>
+                            <CardDescription>
+                                {selectedManifest?.manifest_number} · Loader:{' '}
+                                {loader.name}
+                            </CardDescription>
+                        </CardHeader>
 
-                        <div className="rounded-md bg-muted p-3 text-sm">
-                            <span className="font-medium">Loader:</span>{' '}
-                            {loader.name}
-                        </div>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <div
+                                    className={cn(
+                                        'overflow-hidden rounded-md bg-black',
+                                        !cameraActive && 'hidden',
+                                    )}
+                                >
+                                    <video
+                                        ref={videoRef}
+                                        className="aspect-video w-full object-cover"
+                                        muted
+                                        playsInline
+                                    />
+                                </div>
 
-                        <div className="flex gap-2">
-                            <input
-                                className="min-w-0 flex-1 rounded-md border p-3"
-                                value={barcode}
-                                onChange={(event) =>
-                                    setBarcode(event.target.value)
-                                }
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                        event.preventDefault();
-                                        void scanBarcode(barcode.trim());
+                                {isBarcodeDetectionSupported() && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() =>
+                                            cameraActive
+                                                ? stopCamera()
+                                                : void startCamera()
+                                        }
+                                    >
+                                        {cameraActive ? (
+                                            <>
+                                                <CameraOffIcon /> Stop camera
+                                                scan
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CameraIcon /> Scan with camera
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
+
+                                {cameraError && (
+                                    <AlertError errors={[cameraError]} />
+                                )}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <Input
+                                    value={barcode}
+                                    onChange={(event) =>
+                                        setBarcode(event.target.value)
                                     }
-                                }}
-                                placeholder="Scan or enter pallet barcode"
-                                autoFocus
-                                disabled={scanning || simulating}
-                            />
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            void scanBarcode(barcode.trim());
+                                        }
+                                    }}
+                                    placeholder="Scan or enter pallet barcode"
+                                    autoFocus
+                                    disabled={scanning || simulating}
+                                />
 
-                            <button
+                                <Button
+                                    type="button"
+                                    onClick={() =>
+                                        void scanBarcode(barcode.trim())
+                                    }
+                                    disabled={
+                                        !barcode.trim() ||
+                                        scanning ||
+                                        simulating
+                                    }
+                                >
+                                    {scanning ? 'Loading…' : 'Load'}
+                                </Button>
+                            </div>
+
+                            <Button
                                 type="button"
-                                className="rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-                                onClick={() => void scanBarcode(barcode.trim())}
-                                disabled={
-                                    !barcode.trim() || scanning || simulating
-                                }
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void simulateScan()}
+                                disabled={scanning || simulating}
                             >
-                                {scanning ? 'Loading…' : 'Load'}
-                            </button>
-                        </div>
+                                {simulating
+                                    ? 'Simulating scan…'
+                                    : 'Simulate seeded scan'}
+                            </Button>
 
-                        <button
-                            type="button"
-                            className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-                            onClick={() => void simulateScan()}
-                            disabled={scanning || simulating}
-                        >
-                            {simulating
-                                ? 'Simulating scan…'
-                                : 'Simulate seeded scan'}
-                        </button>
-
-                        {error && (
-                            <p className="text-sm text-red-600">{error}</p>
-                        )}
+                            {error && <AlertError errors={[error]} />}
+                        </CardContent>
 
                         {scanResult && (
-                            <div className="space-y-2 rounded-md bg-green-50 p-3 text-sm text-green-800">
-                                <p>Loaded {scanResult.barcode} successfully.</p>
+                            <CardFooter className="flex-col items-start gap-2 border-t pt-4">
+                                <div className="flex items-center gap-2">
+                                    <Badge className={LOADED_BADGE_CLASS}>
+                                        Loaded
+                                    </Badge>
+                                    <span className="font-medium">
+                                        {scanResult.connoteNumber ??
+                                            scanResult.barcode}
+                                    </span>
+                                    {scanResult.pieceNumber != null && (
+                                        <span className="text-sm text-muted-foreground">
+                                            piece {scanResult.pieceNumber}
+                                        </span>
+                                    )}
+                                </div>
 
                                 {scanResult.loader && scanResult.scannedAt && (
-                                    <p>
+                                    <p className="text-sm text-muted-foreground">
                                         Scanned by {scanResult.loader} at{' '}
                                         {new Date(
                                             scanResult.scannedAt,
@@ -418,110 +576,124 @@ export default function Loading({ loader, destinations }: Props) {
                                     </p>
                                 )}
 
+                                {scanResult.consignmentProgress && (
+                                    <p className="text-sm">
+                                        {
+                                            scanResult.consignmentProgress
+                                                .loaded_count
+                                        }{' '}
+                                        of{' '}
+                                        {
+                                            scanResult.consignmentProgress
+                                                .total_count
+                                        }{' '}
+                                        pallets loaded for this consignment.
+                                    </p>
+                                )}
+
                                 {scanResult.progress && (
-                                    <p className="font-medium">
+                                    <p className="text-sm font-medium">
                                         {scanResult.progress.loaded_count} of{' '}
                                         {scanResult.progress.total_count}{' '}
                                         destination pallets loaded.
                                     </p>
                                 )}
-                            </div>
+                            </CardFooter>
                         )}
-                    </div>
+                    </Card>
                 )}
 
-                {warningPrompt && (
-                    <div
-                        className="space-y-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-950"
-                        role="alertdialog"
-                        aria-labelledby="warning-title"
-                    >
-                        <div>
-                            <h2 id="warning-title" className="font-semibold">
-                                Confirm loading warning
-                            </h2>
-                            <p className="mt-1 text-sm">
-                                {warningPrompt.message}
-                            </p>
+                <Dialog
+                    open={warningPrompt !== null}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setWarningPrompt(null);
+                        }
+                    }}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Confirm loading warning</DialogTitle>
+                            <DialogDescription>
+                                {warningPrompt?.message}
+                            </DialogDescription>
+                        </DialogHeader>
 
-                            {warningPrompt.code === 'already_assigned' &&
-                                warningPrompt.details && (
-                                    <dl className="space-y-1 text-sm">
-                                        <div>
-                                            <dt className="inline font-medium">
-                                                Previous manifest:{' '}
-                                            </dt>
-                                            <dd className="inline">
-                                                {String(
+                        {warningPrompt?.code === 'already_assigned' &&
+                            warningPrompt.details && (
+                                <dl className="space-y-1 text-sm">
+                                    <div>
+                                        <dt className="inline font-medium">
+                                            Previous manifest:{' '}
+                                        </dt>
+                                        <dd className="inline">
+                                            {String(
+                                                warningPrompt.details
+                                                    .previous_manifest_number,
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="inline font-medium">
+                                            Previous loader:{' '}
+                                        </dt>
+                                        <dd className="inline">
+                                            {String(
+                                                warningPrompt.details
+                                                    .previous_loader_name,
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="inline font-medium">
+                                            Previous scan:{' '}
+                                        </dt>
+                                        <dd className="inline">
+                                            {new Date(
+                                                String(
                                                     warningPrompt.details
-                                                        .previous_manifest_number,
-                                                )}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt className="inline font-medium">
-                                                Previous loader:{' '}
-                                            </dt>
-                                            <dd className="inline">
-                                                {String(
-                                                    warningPrompt.details
-                                                        .previous_loader_name,
-                                                )}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt className="inline font-medium">
-                                                Previous scan:{' '}
-                                            </dt>
-                                            <dd className="inline">
-                                                {new Date(
-                                                    String(
-                                                        warningPrompt.details
-                                                            .previous_loaded_at,
-                                                    ),
-                                                ).toLocaleString()}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt className="inline font-medium">
-                                                Move to:{' '}
-                                            </dt>
-                                            <dd className="inline">
-                                                {String(
-                                                    warningPrompt.details
-                                                        .selected_manifest_number,
-                                                )}
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                )}
-                        </div>
+                                                        .previous_loaded_at,
+                                                ),
+                                            ).toLocaleString()}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="inline font-medium">
+                                            Move to:{' '}
+                                        </dt>
+                                        <dd className="inline">
+                                            {String(
+                                                warningPrompt.details
+                                                    .selected_manifest_number,
+                                            )}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            )}
 
-                        <div className="flex gap-2">
-                            <button
+                        <DialogFooter>
+                            <Button
                                 type="button"
-                                className="rounded-md bg-amber-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+                                variant="outline"
+                                onClick={() => setWarningPrompt(null)}
+                                disabled={scanning}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
                                 onClick={confirmWarning}
                                 disabled={scanning}
                             >
                                 {scanning
                                     ? 'Confirming…'
-                                    : warningPrompt.code ===
-                                        'already_assigned'
+                                    : warningPrompt?.code === 'already_assigned'
                                       ? 'Override and load here'
                                       : 'Acknowledge and load'}
-                            </button>
-                            <button
-                                type="button"
-                                className="rounded-md border border-amber-700 px-4 py-2 text-sm"
-                                onClick={() => setWarningPrompt(null)}
-                                disabled={scanning}
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );

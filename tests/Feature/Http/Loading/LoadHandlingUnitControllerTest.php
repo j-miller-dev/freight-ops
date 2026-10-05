@@ -58,7 +58,11 @@ it('loads a pallet through the HTTP endpoint', function () {
         ->assertCreated()
         ->assertJsonPath('data.manifest_id', $manifest->getKey())
         ->assertJsonPath('data.handling_unit_id', $pallet->getKey())
-        ->assertJsonPath('data.barcode', $pallet->barcode);
+        ->assertJsonPath('data.barcode', $pallet->barcode)
+        ->assertJsonPath('data.piece_number', $pallet->piece_number)
+        ->assertJsonPath('data.connote_number', $pallet->consignment->connote_number)
+        ->assertJsonPath('data.consignment_progress.loaded_count', 1)
+        ->assertJsonPath('data.consignment_progress.total_count', $pallet->consignment->item_count);
 
     expect(ManifestItem::query()->count())->toBe(1)
         ->and(OperationalEvent::query()->count())->toBe(1);

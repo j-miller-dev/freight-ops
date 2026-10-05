@@ -19,6 +19,7 @@ class LoadHandlingUnitController extends Controller
     ): JsonResponse {
         $handlingUnit = HandlingUnit::query()
             ->where('barcode', $request->validated('barcode'))
+            ->with('consignment')
             ->firstOrFail();
 
         $manifestItem = $action->handle(
@@ -45,6 +46,8 @@ class LoadHandlingUnitController extends Controller
                 'manifest_id' => $manifestItem->manifest_id,
                 'handling_unit_id' => $manifestItem->handling_unit_id,
                 'barcode' => $handlingUnit->barcode,
+                'piece_number' => $handlingUnit->piece_number,
+                'connote_number' => $handlingUnit->consignment->connote_number,
                 'loaded_at' => $manifestItem->loaded_at?->toISOString(),
                 'loader' => [
                     'id' => $request->user()->getKey(),
@@ -53,6 +56,10 @@ class LoadHandlingUnitController extends Controller
                 'progress' => [
                     'loaded_count' => $loadedCount,
                     'total_count' => $totalCount,
+                ],
+                'consignment_progress' => [
+                    'loaded_count' => $handlingUnit->consignment->loadedCount(),
+                    'total_count' => $handlingUnit->consignment->item_count,
                 ],
             ],
         ], 201);
