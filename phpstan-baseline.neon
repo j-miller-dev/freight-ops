@@ -1,0 +1,211 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:\$current_status\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:consignment\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:getKey\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\>\:\:save\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:destinations\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:getKey\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\>\:\:manifestItems\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Method App\\Actions\\Loading\\LoadHandlingUnit\:\:handle\(\) has parameter \$acknowledgedWarnings with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) has parameter \$metadata with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Offset ''manifest_id'' on string\|null on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \#1 \$manifest of class App\\Exceptions\\Loading\\ManifestNotOpen constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$handlingUnit of method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) expects App\\Models\\HandlingUnit, App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\HandlingUnit\> given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$manifest of method App\\Actions\\Loading\\LoadHandlingUnit\:\:recordLoadedEvent\(\) expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\ConsignmentSplit constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\DestinationMismatch constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\HandlingUnitAlreadyAssigned constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Manifest\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\OperationalEvent\:\:\$event_type \(string\) does not accept App\\Enums\\EventType\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\OperationalEvent\:\:\$metadata \(string\|null\) does not accept array\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$metadata \(string\|null\) does not accept array\<string, mixed\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$metadata \(string\|null\) does not accept array\<string, string\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$warning_type \(string\) does not accept App\\Enums\\LoadWarningType\:\:AlreadyAssigned\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$warning_type \(string\) does not accept App\\Enums\\LoadWarningType\:\:ConsignmentSplit\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$warning_type \(string\) does not accept App\\Enums\\LoadWarningType\:\:DestinationMismatch\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\Depot\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\Depot\>\:\:getKey\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Loading/ListAvailableManifestsController.php
+
+		-
+			message: '#^Cannot call method toDateString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Loading/ListAvailableManifestsController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type string\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Loading/ListAvailableManifestsController.php
+
+		-
+			message: '#^Cannot call method toISOString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Loading/LoadHandlingUnitController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type string\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Loading/LoadHandlingUnitController.php
+
+		-
+			message: '#^Method App\\Http\\Requests\\Loading\\LoadHandlingUnitRequest\:\:acknowledgedWarnings\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Requests/Loading/LoadHandlingUnitRequest.php
+
+		-
+			message: '#^Method App\\Http\\Requests\\Loading\\LoadHandlingUnitRequest\:\:rules\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Requests/Loading/LoadHandlingUnitRequest.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Requests/Loading/LoadHandlingUnitRequest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Requests/Loading/LoadHandlingUnitRequest.php
+
+		-
+			message: '#^Cannot call method toISOString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: bootstrap/app.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type string\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: bootstrap/app.php
