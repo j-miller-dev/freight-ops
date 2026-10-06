@@ -103,6 +103,13 @@ it('allows exactly one concurrent loader to assign a pallet', function () {
             return json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
         });
 
+    if ($results->pluck('result')->all() !== ['assigned', 'conflict']
+        && $results->pluck('result')->all() !== ['conflict', 'assigned']) {
+        throw new RuntimeException(
+            'Unexpected concurrency worker results: '.json_encode($results->all(), JSON_THROW_ON_ERROR),
+        );
+    }
+
     expect($results->where('result', 'assigned'))->toHaveCount(1)
         ->and($results->where('result', 'conflict'))->toHaveCount(1)
         ->and($results->where('result', 'error'))->toHaveCount(0)
