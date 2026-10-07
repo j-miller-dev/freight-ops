@@ -17,6 +17,8 @@ class LoadHandlingUnitController extends Controller
         Manifest $manifest,
         LoadHandlingUnit $action,
     ): JsonResponse {
+        $this->authorize('load', $manifest);
+
         $handlingUnit = HandlingUnit::query()
             ->where('barcode', $request->validated('barcode'))
             ->with('consignment')
