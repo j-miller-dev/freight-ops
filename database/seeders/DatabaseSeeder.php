@@ -32,7 +32,7 @@ class DatabaseSeeder extends Seeder
         $this->depot('SYD', 'Sydney Depot', 'Australia/Sydney');
         $this->depot('BNE', 'Brisbane Depot', 'Australia/Brisbane');
 
-        app(SyncManifests::class)->handle(new FixtureManifestSource());
+        app(SyncManifests::class)->handle(new FixtureManifestSource);
 
         $todaySydney = Manifest::query()->where('source', 'fixture')->where('external_id', 'fixture-mel-syd-today')->firstOrFail();
         $todayBrisbane = Manifest::query()->where('source', 'fixture')->where('external_id', 'fixture-mel-bne-today')->firstOrFail();
