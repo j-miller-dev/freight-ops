@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, flushOutbox, MAX_RETRIES } from '@/lib/outbox';
 import type { FlushCallbacks, OutboxEntry } from '@/lib/outbox';
 
-function makeEntry(overrides: Partial<OutboxEntry> = {}): Omit<OutboxEntry, 'id'> {
+function makeEntry(
+    overrides: Partial<OutboxEntry> = {},
+): Omit<OutboxEntry, 'id'> {
     return {
         client_event_id: '00000000-0000-4000-8000-000000000001',
         manifest_id: 'manifest-uuid',
@@ -16,7 +18,9 @@ function makeEntry(overrides: Partial<OutboxEntry> = {}): Omit<OutboxEntry, 'id'
     };
 }
 
-function makeCallbacks(overrides: Partial<FlushCallbacks> = {}): FlushCallbacks {
+function makeCallbacks(
+    overrides: Partial<FlushCallbacks> = {},
+): FlushCallbacks {
     return {
         onSynced: vi.fn(),
         onWarning: vi.fn(),
@@ -76,7 +80,10 @@ describe('flushOutbox', () => {
             error: {
                 code: 'destination_mismatch',
                 message: 'Pallet destination does not match manifest.',
-                details: { destination_code: 'MEL', manifest_number: 'MAN-001' },
+                details: {
+                    destination_code: 'MEL',
+                    manifest_number: 'MAN-001',
+                },
             },
         });
 
@@ -88,14 +95,21 @@ describe('flushOutbox', () => {
         expect(callbacks.onWarning).toHaveBeenCalledWith(
             expect.objectContaining({ barcode: 'BARCODE-001' }),
             'destination_mismatch',
-            expect.objectContaining({ error: expect.objectContaining({ code: 'destination_mismatch' }) }),
+            expect.objectContaining({
+                error: expect.objectContaining({
+                    code: 'destination_mismatch',
+                }),
+            }),
         );
         expect(callbacks.onSynced).not.toHaveBeenCalled();
     });
 
     it('increments retry_count and keeps entry pending on network error', async () => {
         await db.outbox.add(makeEntry());
-        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+        );
 
         const callbacks = makeCallbacks();
         await flushOutbox(callbacks);
@@ -111,7 +125,10 @@ describe('flushOutbox', () => {
 
     it('marks entry failed after MAX_RETRIES network errors', async () => {
         await db.outbox.add(makeEntry({ retry_count: MAX_RETRIES - 1 }));
-        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+        );
 
         const callbacks = makeCallbacks();
         await flushOutbox(callbacks);
@@ -129,7 +146,10 @@ describe('flushOutbox', () => {
         vi.stubGlobal(
             'fetch',
             vi.fn().mockImplementation((_url: string, init: RequestInit) => {
-                capturedBody = JSON.parse(init.body as string) as Record<string, unknown>;
+                capturedBody = JSON.parse(init.body as string) as Record<
+                    string,
+                    unknown
+                >;
 
                 return Promise.resolve(
                     new Response(JSON.stringify({ data: {} }), {
@@ -142,7 +162,9 @@ describe('flushOutbox', () => {
 
         await flushOutbox(makeCallbacks());
 
-        expect((capturedBody as Record<string, unknown> | null)?.occurred_at).toBe(occurred_at);
+        expect(
+            (capturedBody as Record<string, unknown> | null)?.occurred_at,
+        ).toBe(occurred_at);
     });
 
     it('skips entries that are already synced or failed', async () => {

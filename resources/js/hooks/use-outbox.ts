@@ -15,7 +15,10 @@ export interface OutboxState {
 }
 
 async function readCounts() {
-    const pending = await db.outbox.where('status').anyOf('pending', 'syncing').count();
+    const pending = await db.outbox
+        .where('status')
+        .anyOf('pending', 'syncing')
+        .count();
     const failed = await db.outbox.where('status').equals('failed').count();
 
     return { pending, failed };
@@ -66,7 +69,10 @@ export function useOutbox(): OutboxState {
 
     const submit = useCallback(
         async (
-            raw: Omit<OutboxEntry, 'id' | 'status' | 'retry_count' | 'created_at'>,
+            raw: Omit<
+                OutboxEntry,
+                'id' | 'status' | 'retry_count' | 'created_at'
+            >,
             callbacks: FlushCallbacks,
         ) => {
             callbacksRef.current = callbacks;

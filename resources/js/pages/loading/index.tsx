@@ -303,7 +303,8 @@ export default function Loading({ loader, destinations }: Props) {
                                 barcode: entry.barcode,
                                 clientEventId: entry.client_event_id,
                                 occurredAt: entry.occurred_at,
-                                acknowledgedWarnings: entry.acknowledged_warnings,
+                                acknowledgedWarnings:
+                                    entry.acknowledged_warnings,
                                 code,
                                 message:
                                     j.error.message ??
@@ -474,7 +475,10 @@ export default function Loading({ loader, destinations }: Props) {
                                     setIncludeYesterday(checked === true)
                                 }
                             />
-                            <Label htmlFor="include-yesterday" className="font-normal">
+                            <Label
+                                htmlFor="include-yesterday"
+                                className="font-normal"
+                            >
                                 Include yesterday's manifests
                             </Label>
                         </div>
@@ -675,7 +679,8 @@ export default function Loading({ loader, destinations }: Props) {
                             </DialogDescription>
                         </DialogHeader>
 
-                        {warningPrompt?.code === 'handling_unit_already_assigned' &&
+                        {warningPrompt?.code ===
+                            'handling_unit_already_assigned' &&
                             warningPrompt.details && (
                                 <dl className="space-y-1 text-sm">
                                     <div>
@@ -727,51 +732,85 @@ export default function Loading({ loader, destinations }: Props) {
                                 </dl>
                             )}
 
-                        {warningPrompt?.code === 'consignment_split' && warningPrompt.details && (
-                            <div className="space-y-2 text-sm">
-                                <table className="w-full text-left">
-                                    <thead>
-                                        <tr className="border-b text-muted-foreground">
-                                            <th className="pb-1 font-medium">Manifest</th>
-                                            <th className="pb-1 font-medium text-right">Pallets</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(warningPrompt.details.conflicts as Array<{manifest_number: string; pallet_count: number}>).map((c) => (
-                                            <tr key={c.manifest_number}>
-                                                <td className="py-0.5">{c.manifest_number}</td>
-                                                <td className="py-0.5 text-right">{c.pallet_count}</td>
+                        {warningPrompt?.code === 'consignment_split' &&
+                            warningPrompt.details && (
+                                <div className="space-y-2 text-sm">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="border-b text-muted-foreground">
+                                                <th className="pb-1 font-medium">
+                                                    Manifest
+                                                </th>
+                                                <th className="pb-1 text-right font-medium">
+                                                    Pallets
+                                                </th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                <p className="text-muted-foreground">
-                                    {String(warningPrompt.details.on_selected_after_scan)} of{' '}
-                                    {String(warningPrompt.details.total_count)} total pallets will be
-                                    on this manifest after loading.
-                                </p>
-                            </div>
-                        )}
+                                        </thead>
+                                        <tbody>
+                                            {(
+                                                warningPrompt.details
+                                                    .conflicts as Array<{
+                                                    manifest_number: string;
+                                                    pallet_count: number;
+                                                }>
+                                            ).map((c) => (
+                                                <tr key={c.manifest_number}>
+                                                    <td className="py-0.5">
+                                                        {c.manifest_number}
+                                                    </td>
+                                                    <td className="py-0.5 text-right">
+                                                        {c.pallet_count}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    <p className="text-muted-foreground">
+                                        {String(
+                                            warningPrompt.details
+                                                .on_selected_after_scan,
+                                        )}{' '}
+                                        of{' '}
+                                        {String(
+                                            warningPrompt.details.total_count,
+                                        )}{' '}
+                                        total pallets will be on this manifest
+                                        after loading.
+                                    </p>
+                                </div>
+                            )}
 
-                        {warningPrompt?.code === 'destination_mismatch' && warningPrompt.details && (
-                            <dl className="space-y-1 text-sm">
-                                <div>
-                                    <dt className="inline font-medium">Pallet destination: </dt>
-                                    <dd className="inline">
-                                        {String(warningPrompt.details.destination_code)}
-                                        {warningPrompt.details.destination_name
-                                            ? ` — ${String(warningPrompt.details.destination_name)}`
-                                            : ''}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className="inline font-medium">Selected manifest: </dt>
-                                    <dd className="inline">
-                                        {String(warningPrompt.details.manifest_number)}
-                                    </dd>
-                                </div>
-                            </dl>
-                        )}
+                        {warningPrompt?.code === 'destination_mismatch' &&
+                            warningPrompt.details && (
+                                <dl className="space-y-1 text-sm">
+                                    <div>
+                                        <dt className="inline font-medium">
+                                            Pallet destination:{' '}
+                                        </dt>
+                                        <dd className="inline">
+                                            {String(
+                                                warningPrompt.details
+                                                    .destination_code,
+                                            )}
+                                            {warningPrompt.details
+                                                .destination_name
+                                                ? ` — ${String(warningPrompt.details.destination_name)}`
+                                                : ''}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="inline font-medium">
+                                            Selected manifest:{' '}
+                                        </dt>
+                                        <dd className="inline">
+                                            {String(
+                                                warningPrompt.details
+                                                    .manifest_number,
+                                            )}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            )}
 
                         <DialogFooter>
                             <Button
@@ -789,7 +828,8 @@ export default function Loading({ loader, destinations }: Props) {
                             >
                                 {scanning
                                     ? 'Confirming…'
-                                    : warningPrompt?.code === 'handling_unit_already_assigned'
+                                    : warningPrompt?.code ===
+                                        'handling_unit_already_assigned'
                                       ? 'Override and load here'
                                       : 'Acknowledge and load'}
                             </Button>

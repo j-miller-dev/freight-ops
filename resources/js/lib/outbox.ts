@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import type {Table} from 'dexie';
+import type { Table } from 'dexie';
 
 export type OutboxStatus = 'pending' | 'syncing' | 'synced' | 'failed';
 
@@ -39,8 +39,8 @@ let flushing = false;
 
 export async function flushOutbox(callbacks: FlushCallbacks): Promise<void> {
     if (flushing) {
-return;
-}
+        return;
+    }
 
     flushing = true;
 
@@ -63,13 +63,14 @@ return;
                 } else if (response.status === 409 || response.status === 422) {
                     await db.outbox.update(entry.id!, { status: 'synced' });
                     const errorCode =
-                        ((json.error as Record<string, unknown>)?.code as string) ?? '';
+                        ((json.error as Record<string, unknown>)
+                            ?.code as string) ?? '';
                     callbacks.onWarning(entry, errorCode, json);
                 } else {
                     await handleFlushError(entry);
                     const message =
-                        ((json.error as Record<string, unknown>)?.message as string) ??
-                        'Server error';
+                        ((json.error as Record<string, unknown>)
+                            ?.message as string) ?? 'Server error';
                     callbacks.onError(entry, message);
                 }
             } catch {
@@ -103,7 +104,9 @@ function postScan(entry: OutboxEntry): Promise<Response> {
             Accept: 'application/json',
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            ...(xsrfToken ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) } : {}),
+            ...(xsrfToken
+                ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) }
+                : {}),
         },
         body: JSON.stringify({
             barcode: entry.barcode,
