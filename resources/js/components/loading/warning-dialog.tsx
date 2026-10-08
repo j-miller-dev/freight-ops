@@ -86,7 +86,7 @@ export default function WarningDialog({
                                 <Row
                                     key={conflict.manifest_number}
                                     label={conflict.manifest_number}
-                                    value={`${conflict.pallet_count} pallets`}
+                                    value={`${conflict.pallet_count} ${conflict.pallet_count === 1 ? 'pallet' : 'pallets'}`}
                                 />
                             ))}
                         </dl>

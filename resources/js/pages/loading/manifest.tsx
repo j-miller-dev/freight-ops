@@ -18,6 +18,7 @@ import TrailerAlerts, {
     ClashBanner,
 } from '@/components/loading/trailer-alerts';
 import TrailerDialog from '@/components/loading/trailer-dialog';
+import TrailerMapDialog from '@/components/loading/trailer-map-dialog';
 import WarningDialog from '@/components/loading/warning-dialog';
 import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -26,9 +27,13 @@ import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
 import { useManifestSummary } from '@/hooks/use-manifest-summary';
 import { patchJson } from '@/lib/http';
-import { trailerType } from '@/lib/trailer-types';
 import { cn } from '@/lib/utils';
-import type { ManifestSummary } from '@/types/loading';
+import type {
+    DgItem,
+    ManifestSummary,
+    TrailerPosition,
+    TrailerTypeOption,
+} from '@/types/loading';
 
 type Props = {
     loader: { id: number; name: string };
@@ -44,12 +49,14 @@ type Props = {
     destination: { id: string; code: string; name: string } | null;
     summary: ManifestSummary;
     bay_code: string | null;
+    trailer_types: TrailerTypeOption[];
 };
 
 export default function LoadingManifest({
     manifest,
     destination,
     summary: initialSummary,
+    trailer_types: trailerTypes,
 }: Props) {
     const scanner = useManifestScanner(manifest.id);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,12 +66,53 @@ export default function LoadingManifest({
     const [trailer, setTrailer] = useState(manifest.trailer_type);
     const [trailerOpen, setTrailerOpen] = useState(false);
     const [consignmentsOpen, setConsignmentsOpen] = useState(false);
-    const summary = useManifestSummary(
+    const { summary, refresh } = useManifestSummary(
         manifest.id,
         initialSummary,
         scanner.result,
     );
-    const trailerInfo = trailerType(trailer);
+    const trailerInfo =
+        trailerTypes.find((type) => type.value === trailer) ?? trailerTypes[0];
+
+    // DG placement: the map opens by itself when a DG pallet is scanned, or on
+    // demand from the "On board" tile. It is derived from the scan result, so
+    // dismissing it only suppresses that one pallet.
+    const [mapOpen, setMapOpen] = useState(false);
+    const [dismissedFor, setDismissedFor] = useState<string | null>(null);
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const scanned = scanner.result?.dgClass ? scanner.result : null;
+    const scannedId = scanned?.handlingUnitId ?? null;
+    const autoOpen =
+        scannedId !== null && dismissedFor !== scannedId && !scanner.warning;
+    const mapVisible = mapOpen || autoOpen;
+
+    // The pallet that was just scanned may not be in the summary yet.
+    const justLoaded: DgItem | null =
+        scanned && scannedId
+            ? (summary.dg_items.find((item) => item.id === scannedId) ?? {
+                  id: scannedId,
+                  barcode: scanned.barcode,
+                  piece_number: scanned.pieceNumber ?? 0,
+                  dg_class: scanned.dgClass ?? '',
+                  un_number: scanned.unNumber ?? null,
+                  proper_shipping_name: scanned.properShippingName ?? null,
+                  connote_number: scanned.connoteNumber ?? '',
+                  position: null,
+              })
+            : null;
+    const dgItems =
+        justLoaded &&
+        !summary.dg_items.some((item) => item.id === justLoaded.id)
+            ? [...summary.dg_items, justLoaded]
+            : summary.dg_items;
+    const defaultActiveId = autoOpen
+        ? scannedId
+        : (dgItems.find((item) => !item.position)?.id ??
+          dgItems[0]?.id ??
+          null);
+    const activeItem =
+        dgItems.find((item) => item.id === (activeId ?? defaultActiveId)) ??
+        null;
 
     const closed = manifest.status !== 'open';
     const { outbox } = scanner;
@@ -84,12 +132,52 @@ export default function LoadingManifest({
         setTrailer(value);
 
         try {
-            await patchJson(`/loading/manifests/${manifest.id}/trailer`, {
+            const json = await patchJson<{
+                data: { positions_cleared: number };
+            }>(`/loading/manifests/${manifest.id}/trailer`, {
                 trailer_type: value,
             });
+
+            if (json.data.positions_cleared > 0) {
+                toast.info(
+                    'Trailer positions were cleared for the new layout.',
+                );
+                void refresh();
+            }
         } catch {
             setTrailer(previous);
             toast.error('Could not change the trailer type. Try again.');
+        }
+    }
+
+    async function placeItem(
+        item: DgItem,
+        position: TrailerPosition | null,
+    ): Promise<boolean> {
+        try {
+            await patchJson(
+                `/loading/manifests/${manifest.id}/pallets/${item.id}/position`,
+                position ?? { unit: null, row: null, side: null },
+            );
+            await refresh();
+
+            return true;
+        } catch (error) {
+            toast.error((error as Error).message);
+
+            return false;
+        }
+    }
+
+    function handleMapOpenChange(open: boolean) {
+        setMapOpen(open);
+
+        if (!open) {
+            setActiveId(null);
+
+            if (scannedId) {
+                setDismissedFor(scannedId);
+            }
         }
     }
 
@@ -153,7 +241,7 @@ export default function LoadingManifest({
                     </p>
                     <p className="text-lg font-bold">{trailerInfo.label}</p>
                     <p className="text-xs text-muted-foreground">
-                        {trailerInfo.capacity
+                        {trailerInfo.confirmed
                             ? `${trailerInfo.capacity} pallet positions`
                             : 'Layout to be confirmed'}
                     </p>
@@ -165,22 +253,41 @@ export default function LoadingManifest({
                     className="rounded-2xl border bg-primary px-4 py-3 text-left text-primary-foreground transition active:scale-[0.98]"
                 >
                     <p className="flex items-center gap-1.5 text-xs opacity-80">
-                        <ListChecks className="size-3.5" /> Consignments
+                        <ListChecks className="size-3.5" /> Consignments loaded
                     </p>
                     <p className="text-lg font-bold tabular-nums">
+                        {summary.consignments_complete} /{' '}
+                        {summary.consignments_total}{' '}
+                        <span className="text-sm font-normal">complete</span>
+                    </p>
+                    <p className="flex items-center text-xs opacity-80">
                         {summary.loaded_count}
                         {trailerInfo.capacity
                             ? ` / ${trailerInfo.capacity}`
                             : ''}{' '}
-                        <span className="text-sm font-normal">pallets</span>
-                    </p>
-                    <p className="flex items-center text-xs opacity-80">
-                        See what&apos;s on and what&apos;s left
+                        pallets
+                        {trailerInfo.capacity > 0 &&
+                        summary.loaded_count > trailerInfo.capacity ? (
+                            <span className="ml-1 rounded bg-warning px-1.5 font-semibold text-warning-foreground">
+                                over by{' '}
+                                {summary.loaded_count - trailerInfo.capacity}
+                            </span>
+                        ) : (
+                            " · tap for what's left"
+                        )}
                         <ChevronRight className="size-3.5" />
                     </p>
                 </button>
 
-                <TrailerAlerts summary={summary} />
+                <button
+                    type="button"
+                    onClick={() => setMapOpen(true)}
+                    disabled={summary.dg_items.length === 0}
+                    aria-label="Show dangerous goods on the trailer map"
+                    className="text-left transition active:scale-[0.98] disabled:active:scale-100"
+                >
+                    <TrailerAlerts summary={summary} />
+                </button>
             </section>
 
             <section className="mx-auto grid max-w-4xl gap-8 rounded-3xl border bg-card p-6 shadow-xs lg:grid-cols-2 lg:items-center">
@@ -337,10 +444,22 @@ export default function LoadingManifest({
             </section>
 
             <TrailerDialog
+                options={trailerTypes}
                 open={trailerOpen}
                 value={trailer}
                 onOpenChange={setTrailerOpen}
                 onChange={(value) => void chooseTrailer(value)}
+            />
+
+            <TrailerMapDialog
+                open={mapVisible}
+                onOpenChange={handleMapOpenChange}
+                trailer={trailerInfo}
+                items={dgItems}
+                active={activeItem}
+                onActiveChange={setActiveId}
+                onPlace={placeItem}
+                justLoaded={autoOpen ? justLoaded : null}
             />
 
             <ConsignmentSheet

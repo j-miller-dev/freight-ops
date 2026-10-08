@@ -7,6 +7,7 @@ export type Progress = {
 };
 
 export type ScanResult = {
+    handlingUnitId?: string;
     barcode: string;
     connoteNumber?: string;
     pieceNumber?: number;
@@ -50,6 +51,7 @@ function isWarningCode(code: string): code is WarningCode {
 
 type SyncedResponse = {
     data: {
+        handling_unit_id?: string;
         connote_number?: string;
         piece_number?: number;
         dg_class?: string | null;
@@ -107,6 +109,7 @@ export function useManifestScanner(manifestId: string) {
                         setBarcode('');
                         setWarning(null);
                         setResult({
+                            handlingUnitId: data.handling_unit_id,
                             barcode: entry.barcode,
                             connoteNumber: data.connote_number,
                             pieceNumber: data.piece_number,

@@ -2,7 +2,13 @@ import { Link, usePage } from '@inertiajs/react';
 import { House, Truck, UserRound, WifiOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import AppLogoIcon from '@/components/app-logo-icon';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserMenuContent } from '@/components/user-menu-content';
+import Wordmark from '@/components/wordmark';
 import { useOnlineStatus } from '@/hooks/use-online-status';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -32,7 +38,7 @@ const FOOTER_ITEMS: FooterItem[] = [
 ];
 
 export default function KioskLayout({ children }: { children: ReactNode }) {
-    const { name, auth } = usePage().props;
+    const { auth } = usePage().props;
     const { url } = usePage();
     const online = useOnlineStatus();
     const path = url.split('?')[0];
@@ -40,12 +46,9 @@ export default function KioskLayout({ children }: { children: ReactNode }) {
     return (
         <div className="flex min-h-svh flex-col bg-background">
             <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-card/90 px-4 backdrop-blur">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                        <AppLogoIcon className="size-5 fill-current" />
-                    </div>
-                    <span className="text-base font-semibold">{name}</span>
-                </div>
+                <Link href={dashboard().url} aria-label="Home">
+                    <Wordmark />
+                </Link>
 
                 <div className="flex items-center gap-3 text-sm">
                     {!online && (
@@ -53,9 +56,24 @@ export default function KioskLayout({ children }: { children: ReactNode }) {
                             <WifiOff className="size-4" /> Offline
                         </span>
                     )}
-                    <span className="hidden text-muted-foreground sm:inline">
-                        {auth.user.name}
-                    </span>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                className="flex h-10 items-center gap-2 rounded-full border bg-card px-3 text-sm font-medium hover:bg-accent"
+                            >
+                                <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                                    {auth.user.name.charAt(0).toUpperCase()}
+                                </span>
+                                <span className="hidden sm:inline">
+                                    {auth.user.name}
+                                </span>
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-56">
+                            <UserMenuContent user={auth.user} />
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </header>
 

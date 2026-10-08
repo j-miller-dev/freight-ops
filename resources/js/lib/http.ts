@@ -7,6 +7,19 @@ function xsrfToken(): string | undefined {
     return raw ? decodeURIComponent(raw) : undefined;
 }
 
+async function fail(response: Response): Promise<never> {
+    let message = `Request failed (${response.status})`;
+
+    try {
+        const json = await response.json();
+        message = json.error?.message ?? json.message ?? message;
+    } catch {
+        // Not JSON; keep the generic message.
+    }
+
+    throw new Error(message);
+}
+
 const JSON_HEADERS = {
     Accept: 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
@@ -23,7 +36,7 @@ export async function getJson<T>(
     });
 
     if (!response.ok) {
-        throw new Error(`Request failed (${response.status})`);
+        return fail(response);
     }
 
     return (await response.json()) as T;
@@ -43,7 +56,7 @@ export async function patchJson<T>(url: string, body: unknown): Promise<T> {
     });
 
     if (!response.ok) {
-        throw new Error(`Request failed (${response.status})`);
+        return fail(response);
     }
 
     return (await response.json()) as T;

@@ -2,7 +2,6 @@ import { createInertiaApp } from '@inertiajs/react';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
-import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import KioskLayout from '@/layouts/kiosk-layout';
 import SettingsLayout from '@/layouts/settings/layout';
@@ -20,9 +19,9 @@ createInertiaApp({
             case name === 'dashboard' || name.startsWith('loading/'):
                 return KioskLayout;
             case name.startsWith('settings/'):
-                return [AppLayout, SettingsLayout];
+                return [KioskLayout, SettingsLayout];
             default:
-                return AppLayout;
+                return KioskLayout;
         }
     },
     strictMode: true,

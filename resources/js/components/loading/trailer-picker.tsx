@@ -1,15 +1,16 @@
-import { TRAILER_TYPES } from '@/lib/trailer-types';
 import { cn } from '@/lib/utils';
+import type { TrailerTypeOption } from '@/types/loading';
 
 type Props = {
+    options: TrailerTypeOption[];
     value: string;
     onChange: (value: string) => void;
 };
 
-export default function TrailerPicker({ value, onChange }: Props) {
+export default function TrailerPicker({ options, value, onChange }: Props) {
     return (
         <div role="radiogroup" aria-label="Trailer type" className="flex gap-2">
-            {TRAILER_TYPES.map((type) => {
+            {options.map((type) => {
                 const selected = type.value === value;
 
                 return (

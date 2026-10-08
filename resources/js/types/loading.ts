@@ -1,6 +1,35 @@
+export type TrailerPosition = {
+    unit: number;
+    row: number;
+    // D = driver side, P = passenger side.
+    side: 'D' | 'P';
+};
+
+export type DgItem = {
+    id: string;
+    barcode: string;
+    piece_number: number;
+    dg_class: string;
+    un_number: string | null;
+    proper_shipping_name: string | null;
+    connote_number: string;
+    position: TrailerPosition | null;
+};
+
+export type TrailerTypeOption = {
+    value: string;
+    label: string;
+    rows: number[];
+    capacity: number;
+    confirmed: boolean;
+};
+
 export type ManifestSummary = {
     loaded_count: number;
+    consignments_total: number;
+    consignments_complete: number;
     dg: { class: string; count: number }[];
+    dg_items: DgItem[];
     food_count: number;
     food_conflicts: string[];
 };

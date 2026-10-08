@@ -6,8 +6,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import type { TrailerTypeOption } from '@/types/loading';
 
 type Props = {
+    options: TrailerTypeOption[];
     open: boolean;
     value: string;
     onOpenChange: (open: boolean) => void;
@@ -15,6 +17,7 @@ type Props = {
 };
 
 export default function TrailerDialog({
+    options,
     open,
     value,
     onOpenChange,
@@ -31,6 +34,7 @@ export default function TrailerDialog({
                 </DialogHeader>
 
                 <TrailerPicker
+                    options={options}
                     value={value}
                     onChange={(next) => {
                         onChange(next);
