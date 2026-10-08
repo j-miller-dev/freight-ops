@@ -30,17 +30,23 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The loading page routes are ordinary Inertia visits, so they keep
+        // the default HTML/redirect error handling; only the scan/list/simulate
+        // endpoints behind them speak JSON.
+        $isLoadingApi = fn (Request $request): bool => $request->routeIs('loading.*')
+            && ! $request->routeIs('loading.index', 'loading.depot', 'loading.manifest');
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*')
                 || $request->expectsJson()
-                || $request->routeIs('loading.*'),
+                || $isLoadingApi($request),
         );
 
         $exceptions->render(function (
             Throwable $exception,
             Request $request,
-        ) {
-            if (! $request->routeIs('loading.*')) {
+        ) use ($isLoadingApi) {
+            if (! $isLoadingApi($request)) {
                 return null;
             }
 

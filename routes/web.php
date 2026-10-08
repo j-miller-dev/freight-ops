@@ -4,6 +4,8 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Loading\ListAvailableManifestsController;
 use App\Http\Controllers\Loading\LoadHandlingUnitController;
 use App\Http\Controllers\Loading\LoadingController;
+use App\Http\Controllers\Loading\ShowDepotManifestsController;
+use App\Http\Controllers\Loading\ShowManifestController;
 use App\Http\Controllers\Loading\SimulateHandlingUnitScanController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -16,6 +18,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('loading', LoadingController::class)
         ->name('loading.index');
+
+    Route::get('loading/depots/{depot}', ShowDepotManifestsController::class)
+        ->name('loading.depot');
+
+    Route::get('loading/manifests/{manifest}', ShowManifestController::class)
+        ->name('loading.manifest');
 
     Route::post('loading/manifests/{manifest}/scan', LoadHandlingUnitController::class)
         ->name('loading.scan');
