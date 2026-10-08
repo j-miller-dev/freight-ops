@@ -85,6 +85,9 @@ it('allows exactly one concurrent loader to assign a pallet', function () {
             }
 
             file_put_contents($resultFile, json_encode($payload, JSON_THROW_ON_ERROR));
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
             exit(0);
         }
 

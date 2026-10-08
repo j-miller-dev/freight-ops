@@ -9,6 +9,7 @@ use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class LoadHandlingUnitController extends Controller
 {
@@ -17,7 +18,7 @@ class LoadHandlingUnitController extends Controller
         Manifest $manifest,
         LoadHandlingUnit $action,
     ): JsonResponse {
-        $this->authorize('load', $manifest);
+        Gate::authorize('load', $manifest);
 
         $handlingUnit = HandlingUnit::query()
             ->where('barcode', $request->validated('barcode'))
