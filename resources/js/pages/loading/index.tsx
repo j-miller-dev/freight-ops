@@ -13,6 +13,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -30,6 +31,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useOutbox } from '@/hooks/use-outbox';
 import AppLayout from '@/layouts/app-layout';
 import {
     BarcodeDetectionScanner,
@@ -74,8 +76,13 @@ type PendingScan = {
     acknowledgedWarnings: string[];
 };
 
+type WarningCode =
+    | 'destination_mismatch'
+    | 'consignment_split'
+    | 'handling_unit_already_assigned';
+
 type WarningPrompt = PendingScan & {
-    code: 'destination_mismatch' | 'consignment_split' | 'already_assigned';
+    code: WarningCode;
     message: string;
     details?: Record<string, unknown>;
 };
@@ -93,6 +100,16 @@ type Props = {
 const LOADED_BADGE_CLASS =
     'border-transparent bg-yellow-100 text-yellow-900 dark:bg-yellow-500/20 dark:text-yellow-300';
 
+const WARNING_CODES: readonly WarningCode[] = [
+    'destination_mismatch',
+    'consignment_split',
+    'handling_unit_already_assigned',
+];
+
+function isWarningCode(code: string): code is WarningCode {
+    return (WARNING_CODES as readonly string[]).includes(code);
+}
+
 export default function Loading({ loader, destinations }: Props) {
     const [destinationId, setDestinationId] = useState('');
     const [manifestId, setManifestId] = useState('');
@@ -108,6 +125,9 @@ export default function Loading({ loader, destinations }: Props) {
     );
     const [cameraActive, setCameraActive] = useState(false);
     const [cameraError, setCameraError] = useState('');
+    const [includeYesterday, setIncludeYesterday] = useState(false);
+
+    const outbox = useOutbox();
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const scannerRef = useRef<BarcodeDetectionScanner | null>(null);
@@ -120,6 +140,7 @@ export default function Loading({ loader, destinations }: Props) {
         setError('');
         setScanResult(null);
         setWarningPrompt(null);
+        setIncludeYesterday(false);
     }
 
     useEffect(() => {
@@ -135,6 +156,7 @@ export default function Loading({ loader, destinations }: Props) {
             try {
                 const params = new URLSearchParams({
                     destination_id: destinationId,
+                    ...(includeYesterday ? { include_yesterday: '1' } : {}),
                 });
 
                 const response = await fetch(
@@ -166,7 +188,7 @@ export default function Loading({ loader, destinations }: Props) {
         fetchManifests();
 
         return () => controller.abort();
-    }, [destinationId]);
+    }, [destinationId, includeYesterday]);
 
     // Camera scanning is tied to a single manifest; switching manifests (or
     // unmounting) means a deliberate restart rather than silently scanning
@@ -221,82 +243,80 @@ export default function Loading({ loader, destinations }: Props) {
         setError('');
         setScanResult(null);
 
-        const xsrfToken = document.cookie
-            .split('; ')
-            .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
-            ?.split('=')[1];
-
         try {
-            const response = await fetch(
-                `/loading/manifests/${manifestId}/scan`,
+            await outbox.submit(
                 {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        Accept: 'application/json',
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        ...(xsrfToken
-                            ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) }
-                            : {}),
+                    client_event_id: scan.clientEventId,
+                    manifest_id: manifestId,
+                    barcode: scan.barcode,
+                    occurred_at: scan.occurredAt,
+                    acknowledged_warnings: scan.acknowledgedWarnings,
+                },
+                {
+                    onSynced(entry, json) {
+                        const j = json as {
+                            data: {
+                                connote_number?: string;
+                                piece_number?: number;
+                                loader?: { name: string };
+                                loaded_at?: string;
+                                progress?: {
+                                    loaded_count: number;
+                                    total_count: number;
+                                };
+                                consignment_progress?: {
+                                    loaded_count: number;
+                                    total_count: number;
+                                };
+                            };
+                        };
+                        setBarcode('');
+                        setWarningPrompt(null);
+                        const result: ScanResult = {
+                            barcode: entry.barcode,
+                            connoteNumber: j.data.connote_number,
+                            pieceNumber: j.data.piece_number,
+                            loader: j.data.loader?.name,
+                            scannedAt: j.data.loaded_at,
+                            progress: j.data.progress,
+                            consignmentProgress: j.data.consignment_progress,
+                        };
+                        setScanResult(result);
+                        toast.success(
+                            `Loaded ${result.connoteNumber ?? result.barcode}`,
+                            {
+                                description: result.consignmentProgress
+                                    ? `${result.consignmentProgress.loaded_count} of ${result.consignmentProgress.total_count} pallets for this consignment loaded.`
+                                    : undefined,
+                            },
+                        );
                     },
-                    body: JSON.stringify({
-                        barcode: scan.barcode,
-                        client_event_id: scan.clientEventId,
-                        occurred_at: scan.occurredAt,
-                        acknowledged_warnings: scan.acknowledgedWarnings,
-                    }),
+                    onWarning(entry, code, json) {
+                        if (isWarningCode(code)) {
+                            const j = json as {
+                                error: {
+                                    message?: string;
+                                    details?: Record<string, unknown>;
+                                };
+                            };
+                            setWarningPrompt({
+                                barcode: entry.barcode,
+                                clientEventId: entry.client_event_id,
+                                occurredAt: entry.occurred_at,
+                                acknowledgedWarnings: entry.acknowledged_warnings,
+                                code,
+                                message:
+                                    j.error.message ??
+                                    'This scan needs confirmation.',
+                                details: j.error.details,
+                            });
+                        }
+                    },
+                    onError(_entry, message) {
+                        setError(message);
+                    },
                 },
             );
-
-            const json = await response.json();
-
-            if (!response.ok) {
-                const warningCodes = [
-                    'destination_mismatch',
-                    'consignment_split',
-                    'already_assigned',
-                ] as const;
-
-                if (warningCodes.includes(json.error?.code)) {
-                    setWarningPrompt({
-                        ...scan,
-                        code: json.error.code,
-                        message:
-                            json.error.message ??
-                            'This scan needs confirmation.',
-                        details: json.error.details,
-                    });
-
-                    return;
-                }
-
-                throw new Error(
-                    json.error?.message ?? 'Unable to load this pallet.',
-                );
-            }
-
-            setBarcode('');
-            setWarningPrompt(null);
-
-            const result: ScanResult = {
-                barcode: scan.barcode,
-                connoteNumber: json.data.connote_number,
-                pieceNumber: json.data.piece_number,
-                loader: json.data.loader?.name,
-                scannedAt: json.data.loaded_at,
-                progress: json.data.progress,
-                consignmentProgress: json.data.consignment_progress,
-            };
-
-            setScanResult(result);
-            toast.success(`Loaded ${result.connoteNumber ?? result.barcode}`, {
-                description: result.consignmentProgress
-                    ? `${result.consignmentProgress.loaded_count} of ${result.consignmentProgress.total_count} pallets for this consignment loaded.`
-                    : undefined,
-            });
-        } catch (scanError) {
-            setError((scanError as Error).message);
         } finally {
             setScanning(false);
             busyRef.current = false;
@@ -445,6 +465,19 @@ export default function Loading({ loader, destinations }: Props) {
                                 No open manifests found for this destination.
                             </p>
                         )}
+
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="include-yesterday"
+                                checked={includeYesterday}
+                                onCheckedChange={(checked) =>
+                                    setIncludeYesterday(checked === true)
+                                }
+                            />
+                            <Label htmlFor="include-yesterday" className="font-normal">
+                                Include yesterday's manifests
+                            </Label>
+                        </div>
                     </div>
                 )}
 
@@ -459,6 +492,29 @@ export default function Loading({ loader, destinations }: Props) {
                         </CardHeader>
 
                         <CardContent className="space-y-4">
+                            {!outbox.isOnline && (
+                                <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                                    Offline — scans are queuing locally.
+                                </p>
+                            )}
+
+                            {outbox.pendingCount > 0 && (
+                                <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                                    {outbox.pendingCount}{' '}
+                                    {outbox.pendingCount === 1
+                                        ? 'scan'
+                                        : 'scans'}{' '}
+                                    queued — will sync when back online.
+                                </p>
+                            )}
+
+                            {outbox.hasFailed && (
+                                <p className="text-sm text-red-600 dark:text-red-400">
+                                    Some scans could not be delivered after
+                                    retries. Contact a supervisor.
+                                </p>
+                            )}
+
                             <div className="space-y-2">
                                 <div
                                     className={cn(
@@ -619,7 +675,7 @@ export default function Loading({ loader, destinations }: Props) {
                             </DialogDescription>
                         </DialogHeader>
 
-                        {warningPrompt?.code === 'already_assigned' &&
+                        {warningPrompt?.code === 'handling_unit_already_assigned' &&
                             warningPrompt.details && (
                                 <dl className="space-y-1 text-sm">
                                     <div>
@@ -671,6 +727,52 @@ export default function Loading({ loader, destinations }: Props) {
                                 </dl>
                             )}
 
+                        {warningPrompt?.code === 'consignment_split' && warningPrompt.details && (
+                            <div className="space-y-2 text-sm">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b text-muted-foreground">
+                                            <th className="pb-1 font-medium">Manifest</th>
+                                            <th className="pb-1 font-medium text-right">Pallets</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(warningPrompt.details.conflicts as Array<{manifest_number: string; pallet_count: number}>).map((c) => (
+                                            <tr key={c.manifest_number}>
+                                                <td className="py-0.5">{c.manifest_number}</td>
+                                                <td className="py-0.5 text-right">{c.pallet_count}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <p className="text-muted-foreground">
+                                    {String(warningPrompt.details.on_selected_after_scan)} of{' '}
+                                    {String(warningPrompt.details.total_count)} total pallets will be
+                                    on this manifest after loading.
+                                </p>
+                            </div>
+                        )}
+
+                        {warningPrompt?.code === 'destination_mismatch' && warningPrompt.details && (
+                            <dl className="space-y-1 text-sm">
+                                <div>
+                                    <dt className="inline font-medium">Pallet destination: </dt>
+                                    <dd className="inline">
+                                        {String(warningPrompt.details.destination_code)}
+                                        {warningPrompt.details.destination_name
+                                            ? ` — ${String(warningPrompt.details.destination_name)}`
+                                            : ''}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt className="inline font-medium">Selected manifest: </dt>
+                                    <dd className="inline">
+                                        {String(warningPrompt.details.manifest_number)}
+                                    </dd>
+                                </div>
+                            </dl>
+                        )}
+
                         <DialogFooter>
                             <Button
                                 type="button"
@@ -687,7 +789,7 @@ export default function Loading({ loader, destinations }: Props) {
                             >
                                 {scanning
                                     ? 'Confirming…'
-                                    : warningPrompt?.code === 'already_assigned'
+                                    : warningPrompt?.code === 'handling_unit_already_assigned'
                                       ? 'Override and load here'
                                       : 'Acknowledge and load'}
                             </Button>
