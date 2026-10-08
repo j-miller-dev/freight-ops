@@ -1,4 +1,5 @@
-import { Check, ScanBarcode, X } from 'lucide-react';
+import { Apple, Check, ScanBarcode, X } from 'lucide-react';
+import DgDiamond from '@/components/loading/dg-diamond';
 import type { ScanResult } from '@/hooks/use-manifest-scanner';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,26 @@ export default function ScanFeedback({ result, error, scanning }: Props) {
                             </span>
                         )}
                     </p>
+                    {result.dgClass && (
+                        <p className="flex items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2 text-left">
+                            <DgDiamond cls={result.dgClass} size={44} />
+                            <span className="text-sm font-semibold">
+                                Dangerous goods · class {result.dgClass}
+                                {(result.unNumber ||
+                                    result.properShippingName) && (
+                                    <span className="block font-normal text-muted-foreground">
+                                        {result.unNumber}{' '}
+                                        {result.properShippingName}
+                                    </span>
+                                )}
+                            </span>
+                        </p>
+                    )}
+                    {result.isFood && (
+                        <p className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-sm font-semibold text-success">
+                            <Apple className="size-4" /> Food
+                        </p>
+                    )}
                     {result.consignmentProgress && (
                         <p className="text-muted-foreground">
                             {result.consignmentProgress.loaded_count} of{' '}

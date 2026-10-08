@@ -14,6 +14,10 @@ export type ScanResult = {
     scannedAt?: string;
     progress?: Progress;
     consignmentProgress?: Progress;
+    dgClass?: string | null;
+    unNumber?: string | null;
+    properShippingName?: string | null;
+    isFood?: boolean;
 };
 
 export type WarningCode =
@@ -48,6 +52,10 @@ type SyncedResponse = {
     data: {
         connote_number?: string;
         piece_number?: number;
+        dg_class?: string | null;
+        un_number?: string | null;
+        proper_shipping_name?: string | null;
+        is_food?: boolean;
         loader?: { name: string };
         loaded_at?: string;
         progress?: Progress;
@@ -102,6 +110,10 @@ export function useManifestScanner(manifestId: string) {
                             barcode: entry.barcode,
                             connoteNumber: data.connote_number,
                             pieceNumber: data.piece_number,
+                            dgClass: data.dg_class,
+                            unNumber: data.un_number,
+                            properShippingName: data.proper_shipping_name,
+                            isFood: data.is_food,
                             loader: data.loader?.name,
                             scannedAt: data.loaded_at,
                             progress: data.progress,

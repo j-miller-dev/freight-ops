@@ -1,17 +1,34 @@
 import { Head } from '@inertiajs/react';
-import { Camera, CameraOff, Keyboard, WifiOff } from 'lucide-react';
+import {
+    Camera,
+    CameraOff,
+    ChevronRight,
+    Keyboard,
+    ListChecks,
+    Truck,
+    WifiOff,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import AlertError from '@/components/alert-error';
+import ConsignmentSheet from '@/components/loading/consignment-sheet';
+import DepartureBadge from '@/components/loading/departure-badge';
 import ScanFeedback from '@/components/loading/scan-feedback';
-import TrailerPicker from '@/components/loading/trailer-picker';
+import TrailerAlerts, {
+    ClashBanner,
+} from '@/components/loading/trailer-alerts';
+import TrailerDialog from '@/components/loading/trailer-dialog';
 import WarningDialog from '@/components/loading/warning-dialog';
 import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
-import { DEFAULT_TRAILER_TYPE } from '@/lib/trailer-types';
+import { useManifestSummary } from '@/hooks/use-manifest-summary';
+import { patchJson } from '@/lib/http';
+import { trailerType } from '@/lib/trailer-types';
 import { cn } from '@/lib/utils';
+import type { ManifestSummary } from '@/types/loading';
 
 type Props = {
     loader: { id: number; name: string };
@@ -19,34 +36,35 @@ type Props = {
         id: string;
         manifest_number: string;
         service_date: string;
+        departs_at: string | null;
         status: string;
         manifest_items_count: number;
+        trailer_type: string;
     };
     destination: { id: string; code: string; name: string } | null;
+    summary: ManifestSummary;
+    bay_code: string | null;
 };
 
-// Trailer choice is a per-device convenience until it is persisted on the
-// manifest itself, so a refresh mid-load doesn't lose it.
-function readTrailerType(manifestId: string): string {
-    try {
-        return (
-            localStorage.getItem(`trailer-type:${manifestId}`) ??
-            DEFAULT_TRAILER_TYPE
-        );
-    } catch {
-        return DEFAULT_TRAILER_TYPE;
-    }
-}
-
-export default function LoadingManifest({ manifest, destination }: Props) {
+export default function LoadingManifest({
+    manifest,
+    destination,
+    summary: initialSummary,
+}: Props) {
     const scanner = useManifestScanner(manifest.id);
     const videoRef = useRef<HTMLVideoElement>(null);
     const camera = useBarcodeCamera(videoRef, scanner.scan);
     const inputRef = useRef<HTMLInputElement>(null);
     const [keyboard, setKeyboard] = useState(false);
-    const [trailerType, setTrailerType] = useState(() =>
-        readTrailerType(manifest.id),
+    const [trailer, setTrailer] = useState(manifest.trailer_type);
+    const [trailerOpen, setTrailerOpen] = useState(false);
+    const [consignmentsOpen, setConsignmentsOpen] = useState(false);
+    const summary = useManifestSummary(
+        manifest.id,
+        initialSummary,
+        scanner.result,
     );
+    const trailerInfo = trailerType(trailer);
 
     const closed = manifest.status !== 'open';
     const { outbox } = scanner;
@@ -61,13 +79,17 @@ export default function LoadingManifest({ manifest, destination }: Props) {
         }
     }, [busy, scanner.warning, closed]);
 
-    function chooseTrailer(value: string) {
-        setTrailerType(value);
+    async function chooseTrailer(value: string) {
+        const previous = trailer;
+        setTrailer(value);
 
         try {
-            localStorage.setItem(`trailer-type:${manifest.id}`, value);
+            await patchJson(`/loading/manifests/${manifest.id}/trailer`, {
+                trailer_type: value,
+            });
         } catch {
-            // Storage unavailable; the choice just won't survive a refresh.
+            setTrailer(previous);
+            toast.error('Could not change the trailer type. Try again.');
         }
     }
 
@@ -115,11 +137,50 @@ export default function LoadingManifest({ manifest, destination }: Props) {
                 )}
             </div>
 
-            <section className="mb-4">
-                <p className="mb-2 text-sm font-medium text-muted-foreground">
-                    Trailer
-                </p>
-                <TrailerPicker value={trailerType} onChange={chooseTrailer} />
+            <ClashBanner summary={summary} />
+
+            <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <DepartureBadge departsAt={manifest.departs_at} />
+
+                <button
+                    type="button"
+                    onClick={() => setTrailerOpen(true)}
+                    disabled={closed}
+                    className="rounded-2xl border bg-card px-4 py-3 text-left transition hover:border-primary active:scale-[0.98] disabled:opacity-60"
+                >
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Truck className="size-3.5" /> Trailer · tap to change
+                    </p>
+                    <p className="text-lg font-bold">{trailerInfo.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                        {trailerInfo.capacity
+                            ? `${trailerInfo.capacity} pallet positions`
+                            : 'Layout to be confirmed'}
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setConsignmentsOpen(true)}
+                    className="rounded-2xl border bg-primary px-4 py-3 text-left text-primary-foreground transition active:scale-[0.98]"
+                >
+                    <p className="flex items-center gap-1.5 text-xs opacity-80">
+                        <ListChecks className="size-3.5" /> Consignments
+                    </p>
+                    <p className="text-lg font-bold tabular-nums">
+                        {summary.loaded_count}
+                        {trailerInfo.capacity
+                            ? ` / ${trailerInfo.capacity}`
+                            : ''}{' '}
+                        <span className="text-sm font-normal">pallets</span>
+                    </p>
+                    <p className="flex items-center text-xs opacity-80">
+                        See what&apos;s on and what&apos;s left
+                        <ChevronRight className="size-3.5" />
+                    </p>
+                </button>
+
+                <TrailerAlerts summary={summary} />
             </section>
 
             <section className="mx-auto grid max-w-4xl gap-8 rounded-3xl border bg-card p-6 shadow-xs lg:grid-cols-2 lg:items-center">
@@ -274,6 +335,20 @@ export default function LoadingManifest({ manifest, destination }: Props) {
                     </div>
                 </div>
             </section>
+
+            <TrailerDialog
+                open={trailerOpen}
+                value={trailer}
+                onOpenChange={setTrailerOpen}
+                onChange={(value) => void chooseTrailer(value)}
+            />
+
+            <ConsignmentSheet
+                manifestId={manifest.id}
+                manifestNumber={manifest.manifest_number}
+                open={consignmentsOpen}
+                onOpenChange={setConsignmentsOpen}
+            />
 
             <WarningDialog
                 warning={scanner.warning}

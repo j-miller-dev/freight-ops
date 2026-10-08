@@ -16,6 +16,7 @@ type Manifest = {
     id: string;
     manifest_number: string;
     service_date: string;
+    departs_at: string | null;
     status: string;
     manifest_items_count: number;
 };
@@ -152,6 +153,17 @@ export default function LoadingDepot({ destination }: Props) {
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                     {formatServiceDate(manifest.service_date)}
+                                    {manifest.departs_at && open && (
+                                        <span className="font-semibold text-foreground">
+                                            {' · '}Departs{' '}
+                                            {new Date(
+                                                manifest.departs_at,
+                                            ).toLocaleTimeString([], {
+                                                hour: 'numeric',
+                                                minute: '2-digit',
+                                            })}
+                                        </span>
+                                    )}
                                 </p>
                             </div>
 
