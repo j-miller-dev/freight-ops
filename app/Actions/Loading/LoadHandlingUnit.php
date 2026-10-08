@@ -75,6 +75,7 @@ class LoadHandlingUnit
 
             $existingAssignment = ManifestItem::query()
                 ->where('handling_unit_id', $lockedHandlingUnit->getKey())
+                ->lockForUpdate()
                 ->first();
 
             if ($existingAssignment !== null) {
