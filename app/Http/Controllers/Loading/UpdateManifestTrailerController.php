@@ -20,11 +20,21 @@ class UpdateManifestTrailerController extends Controller
             'trailer_type' => ['required', Rule::enum(TrailerType::class)],
         ]);
 
-        $manifest->trailer_type = TrailerType::from($validated['trailer_type']);
+        $type = TrailerType::from($validated['trailer_type']);
+        $cleared = 0;
+
+        if ($type !== $manifest->trailer_type) {
+            // Positions belong to the old layout, so they no longer mean anything.
+            $cleared = $manifest->manifestItems()
+                ->whereNotNull('trailer_unit')
+                ->update(['trailer_unit' => null, 'trailer_row' => null, 'trailer_side' => null]);
+        }
+
+        $manifest->trailer_type = $type;
         $manifest->save();
 
         return response()->json([
-            'data' => ['trailer_type' => $manifest->trailer_type->value],
+            'data' => ['trailer_type' => $type->value, 'positions_cleared' => $cleared],
         ]);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Loading;
 
+use App\Enums\TrailerType;
 use App\Http\Controllers\Controller;
 use App\Models\Manifest;
 use App\Support\Loading\ManifestConsignmentBoard;
@@ -36,6 +37,13 @@ class ShowManifestController extends Controller
             ]) + ['trailer_type' => $manifest->trailer_type->value],
             'summary' => $summary->for($manifest),
             'bay_code' => $board->bayFor($manifest)?->code,
+            'trailer_types' => array_map(fn (TrailerType $type): array => [
+                'value' => $type->value,
+                'label' => $type->label(),
+                'rows' => $type->rows(),
+                'capacity' => $type->capacity(),
+                'confirmed' => $type->isLayoutConfirmed(),
+            ], TrailerType::selectable()),
             'destination' => $destination?->only(['id', 'code', 'name']),
         ]);
     }

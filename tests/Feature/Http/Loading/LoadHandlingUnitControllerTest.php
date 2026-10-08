@@ -294,3 +294,36 @@ it('shows destination mismatch details', function () {
         ->assertJsonPath('error.details.destination_name', 'Melbourne')
         ->assertJsonPath('error.details.manifest_number', $manifest->manifest_number);
 });
+
+it('counts only this consignment when reporting pallets on the selected manifest', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $selectedManifest = loadingManifest($destination);
+    $conflictManifest = loadingManifest($destination);
+
+    // Unrelated freight already on the selected manifest must not inflate the count.
+    foreach (range(1, 3) as $ignored) {
+        ManifestItem::factory()->create([
+            'manifest_id' => $selectedManifest->getKey(),
+            'handling_unit_id' => loadingPallet($destination)->getKey(),
+        ]);
+    }
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 3,
+    ]);
+    [$onSelected, $onConflict, $toScan] = HandlingUnit::factory()
+        ->count(3)
+        ->for($consignment)
+        ->create(['current_status' => HandlingUnitStatus::Pending]);
+
+    ManifestItem::factory()->create(['manifest_id' => $selectedManifest->getKey(), 'handling_unit_id' => $onSelected->getKey()]);
+    ManifestItem::factory()->create(['manifest_id' => $conflictManifest->getKey(), 'handling_unit_id' => $onConflict->getKey()]);
+
+    $this->actingAs($loader)
+        ->postJson(route('loading.scan', $selectedManifest), scanPayload($toScan))
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'consignment_split')
+        ->assertJsonPath('error.details.on_selected_after_scan', 2);
+});

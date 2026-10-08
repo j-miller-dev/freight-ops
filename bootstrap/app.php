@@ -91,7 +91,10 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 409,
                     'details' => [
                         'total_count' => $exception->consignment->item_count,
-                        'on_selected_after_scan' => $exception->selectedManifest->manifestItems()->count() + 1,
+                        // This consignment's pallets on the selected manifest, plus the one being scanned.
+                        'on_selected_after_scan' => $exception->selectedManifest->manifestItems()
+                            ->whereHas('handlingUnit', fn ($query) => $query->where('consignment_id', $exception->consignment->getKey()))
+                            ->count() + 1,
                         'conflicts' => $exception->conflictsByManifest()
                             ->map(fn (array $conflict) => [
                                 'manifest_number' => $conflict['manifest']->manifest_number,

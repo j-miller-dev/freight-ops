@@ -10,6 +10,7 @@ use App\Http\Controllers\Loading\ShowDepotManifestsController;
 use App\Http\Controllers\Loading\ShowManifestConsignmentController;
 use App\Http\Controllers\Loading\ShowManifestController;
 use App\Http\Controllers\Loading\SimulateHandlingUnitScanController;
+use App\Http\Controllers\Loading\UpdateManifestItemPositionController;
 use App\Http\Controllers\Loading\UpdateManifestTrailerController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -34,6 +35,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::patch('loading/manifests/{manifest}/trailer', UpdateManifestTrailerController::class)
         ->name('loading.manifest.trailer');
+
+    Route::patch('loading/manifests/{manifest}/pallets/{handlingUnit}/position', UpdateManifestItemPositionController::class)
+        ->name('loading.manifest.position');
 
     Route::get('loading/manifests/{manifest}/consignments', ListManifestConsignmentsController::class)
         ->name('loading.manifest.consignments');

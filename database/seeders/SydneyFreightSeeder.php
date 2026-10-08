@@ -69,21 +69,15 @@ class SydneyFreightSeeder extends Seeder
         ],
     ];
 
-    /**
-     * Pallet positions per trailer type. A B-double is 7 rows of 2 on the lead
-     * trailer plus 10 rows of 2 on the rear; the others are placeholders until
-     * the real layouts are confirmed.
-     *
-     * @var array<string, int>
-     */
-    private const CAPACITY = ['b_double' => 34, 'b_triple' => 44, 'a_double' => 28];
-
     private Location $bay;
 
     private Location $holding;
 
     /** @var array<string, int> pallets loaded so far, by manifest id */
     private array $fill = [];
+
+    /** @var array<string, array<string, true>> trailer positions taken, by manifest id */
+    private array $slots = [];
 
     public function run(): void
     {
@@ -95,6 +89,7 @@ class SydneyFreightSeeder extends Seeder
         // leaves stale pallets or assignments behind.
         Consignment::query()->where('connote_number', 'like', 'SY%')->delete();
         $this->fill = [];
+        $this->slots = [];
 
         $this->bay = Location::query()->updateOrCreate(
             ['depot_id' => $melbourne->getKey(), 'code' => 'SYD02'],
@@ -198,7 +193,7 @@ class SydneyFreightSeeder extends Seeder
     {
         for ($step = 0; $step < count($open); $step++) {
             $manifest = $open[($wanted + $step) % count($open)];
-            $capacity = self::CAPACITY[$manifest->trailer_type->value] ?? 34;
+            $capacity = $manifest->trailer_type->capacity();
 
             if (($this->fill[$manifest->getKey()] ?? 0) < $capacity) {
                 $this->fill[$manifest->getKey()] = ($this->fill[$manifest->getKey()] ?? 0) + 1;
@@ -345,13 +340,44 @@ class SydneyFreightSeeder extends Seeder
                 'loaded_by' => $loader->getKey(),
                 'client_event_id' => $clientEventId,
                 'loaded_at' => $loadedAt,
-            ],
+            ] + $this->position($manifest, $dg !== null),
         );
 
         $this->event($pallet, $loader, EventType::Loaded, $loadedAt, "syd-{$barcode}", [
             'manifest_id' => $manifest->getKey(),
             'manifest_number' => $manifest->manifest_number,
         ]);
+    }
+
+    /**
+     * Most DG pallets have already been placed on the trailer by the loader.
+     *
+     * @return array{trailer_unit: int|null, trailer_row: int|null, trailer_side: string|null}
+     */
+    private function position(Manifest $manifest, bool $isDg): array
+    {
+        $none = ['trailer_unit' => null, 'trailer_row' => null, 'trailer_side' => null];
+
+        if (! $isDg || mt_rand(1, 10) > 7) {
+            return $none;
+        }
+
+        $rows = $manifest->trailer_type->rows();
+
+        for ($try = 0; $try < 40; $try++) {
+            $unit = mt_rand(1, count($rows));
+            $row = mt_rand(1, $rows[$unit - 1]);
+            $side = mt_rand(0, 1) === 0 ? 'D' : 'P';
+            $key = "{$unit}-{$row}-{$side}";
+
+            if (! isset($this->slots[$manifest->getKey()][$key])) {
+                $this->slots[$manifest->getKey()][$key] = true;
+
+                return ['trailer_unit' => $unit, 'trailer_row' => $row, 'trailer_side' => $side];
+            }
+        }
+
+        return $none;
     }
 
     /**
