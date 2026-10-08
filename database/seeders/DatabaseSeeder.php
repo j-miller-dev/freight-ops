@@ -61,6 +61,8 @@ class DatabaseSeeder extends Seeder
 
         $alreadyLoaded = $this->consignment('CN-LOADED-001', $sydney, 1);
         $this->pallet($alreadyLoaded, 'PALLET-LOADED-001', 1, $todaySydney, $loader, 'loaded-001');
+
+        $this->call(SydneyFreightSeeder::class);
     }
 
     private function depot(string $code, string $name, string $timezone): Depot
