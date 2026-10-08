@@ -4,9 +4,12 @@ namespace Database\Seeders;
 
 use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
+use App\Enums\LocationType;
+use App\Enums\TrailerType;
 use App\Models\Consignment;
 use App\Models\Depot;
 use App\Models\HandlingUnit;
+use App\Models\Location;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
 use App\Models\OperationalEvent;
@@ -15,8 +18,9 @@ use Illuminate\Database\Seeder;
 
 /**
  * A busy Sydney-bound day: many manifests (enough to page), and consignments in
- * every load state so split and "what's left" views have real data. All names
- * are fictional.
+ * every load state so split and "what's left" views have real data. Includes
+ * food and dangerous goods so the trailer alerts have something to show. All
+ * names are fictional.
  */
 class SydneyFreightSeeder extends Seeder
 {
@@ -41,11 +45,70 @@ class SydneyFreightSeeder extends Seeder
     /** @var list<string> */
     private const SERVICES = ['EXPRESS', 'STANDARD', 'STANDARD', 'ECONOMY'];
 
+    /** Senders whose freight is food, and so must not share a trailer with some DG classes. */
+    private const FOOD_SENDERS = ['Evergreen Produce Co', 'Bluegum Beverages'];
+
+    /**
+     * Dangerous goods each sender ships: [class, UN number, proper shipping name].
+     *
+     * @var array<string, list<array{0: string, 1: string, 2: string}>>
+     */
+    private const DG_BY_SENDER = [
+        'Redfern Industrial Chemicals' => [
+            ['8', 'UN1791', 'HYPOCHLORITE SOLUTION'],
+            ['6.1', 'UN2810', 'TOXIC LIQUID, ORGANIC, N.O.S.'],
+            ['3', 'UN1993', 'FLAMMABLE LIQUID, N.O.S.'],
+        ],
+        'Summit Pool & Garden' => [
+            ['5.1', 'UN1748', 'CALCIUM HYPOCHLORITE, DRY'],
+            ['8', 'UN1789', 'HYDROCHLORIC ACID'],
+        ],
+        'Apex Auto Parts' => [
+            ['2.1', 'UN1950', 'AEROSOLS, FLAMMABLE'],
+            ['9', 'UN3481', 'LITHIUM ION BATTERIES'],
+        ],
+    ];
+
+    /**
+     * Pallet positions per trailer type. A B-double is 7 rows of 2 on the lead
+     * trailer plus 10 rows of 2 on the rear; the others are placeholders until
+     * the real layouts are confirmed.
+     *
+     * @var array<string, int>
+     */
+    private const CAPACITY = ['b_double' => 34, 'b_triple' => 44, 'a_double' => 28];
+
+    private Location $bay;
+
+    private Location $holding;
+
+    /** @var array<string, int> pallets loaded so far, by manifest id */
+    private array $fill = [];
+
     public function run(): void
     {
         $loader = User::query()->where('email', 'test@example.com')->firstOrFail();
         $sydney = Depot::query()->where('code', 'SYD')->firstOrFail();
         $melbourne = Depot::query()->where('code', 'MEL')->firstOrFail();
+
+        // Rebuild this seeder's freight from scratch so a changed plan never
+        // leaves stale pallets or assignments behind.
+        Consignment::query()->where('connote_number', 'like', 'SY%')->delete();
+        $this->fill = [];
+
+        $this->bay = Location::query()->updateOrCreate(
+            ['depot_id' => $melbourne->getKey(), 'code' => 'SYD02'],
+            [
+                'name' => 'Sydney bay',
+                'type' => LocationType::Bay,
+                'destination_depot_id' => $sydney->getKey(),
+                'is_active' => true,
+            ],
+        );
+        $this->holding = Location::query()->updateOrCreate(
+            ['depot_id' => $melbourne->getKey(), 'code' => 'HOLD1'],
+            ['name' => 'Holding bay 1', 'type' => LocationType::HoldingArea, 'is_active' => true],
+        );
 
         $manifests = $this->manifests($melbourne, $sydney);
 
@@ -62,6 +125,9 @@ class SydneyFreightSeeder extends Seeder
      */
     private function manifests(Depot $origin, Depot $destination): array
     {
+        // Minutes until each trailer departs; the last one has already left.
+        $departures = [25, 100, 180, 300, 420, 540, -120];
+        $trailers = [TrailerType::BDouble, TrailerType::BDouble, TrailerType::BTriple, TrailerType::BDouble, TrailerType::ADouble, TrailerType::BDouble, TrailerType::BDouble];
         $manifests = [];
 
         for ($n = 1; $n <= self::MANIFEST_COUNT; $n++) {
@@ -71,9 +137,11 @@ class SydneyFreightSeeder extends Seeder
                     'depot_id' => $origin->getKey(),
                     'manifest_number' => sprintf('MEL-SYD-2610%02d', $n),
                     'service_date' => today()->toDateString(),
+                    'departs_at' => now()->addMinutes($departures[$n - 1]),
                     // The last one is already gone, to exercise the closed state.
                     'status' => $n === self::MANIFEST_COUNT ? 'closed' : 'open',
                     'trailer_label' => "SYD FreightOps {$n}",
+                    'trailer_type' => $trailers[$n - 1],
                     'source_updated_at' => now(),
                     'last_synced_at' => now(),
                 ],
@@ -96,13 +164,14 @@ class SydneyFreightSeeder extends Seeder
     {
         $connote = sprintf('SY%06d', 410000 + $index * 37);
         $itemCount = $this->itemCount($index);
+        $sender = self::SENDERS[$index % count(self::SENDERS)];
 
         $consignment = Consignment::query()->updateOrCreate(
             ['connote_number' => $connote],
             [
                 'destination_depot_id' => $sydney->getKey(),
                 'item_count' => $itemCount,
-                'sender_name' => self::SENDERS[$index % count(self::SENDERS)],
+                'sender_name' => $sender,
                 'receiver_name' => self::RECEIVERS[$index % count(self::RECEIVERS)],
                 'service_code' => self::SERVICES[$index % count(self::SERVICES)],
             ],
@@ -113,10 +182,32 @@ class SydneyFreightSeeder extends Seeder
         $plan = $this->loadPlan($index, $itemCount, count($open));
 
         for ($piece = 1; $piece <= $itemCount; $piece++) {
-            $manifest = isset($plan[$piece]) ? $open[$plan[$piece]] : null;
+            $manifest = isset($plan[$piece]) ? $this->withRoom($open, $plan[$piece]) : null;
 
-            $this->pallet($consignment, $connote, $piece, $manifest, $loader);
+            $this->pallet($consignment, $connote, $piece, $manifest, $loader, $sender, $index);
         }
+    }
+
+    /**
+     * The wanted manifest, or the next one with a free position. Null when every
+     * trailer is full, which leaves the pallet on the dock.
+     *
+     * @param  list<Manifest>  $open
+     */
+    private function withRoom(array $open, int $wanted): ?Manifest
+    {
+        for ($step = 0; $step < count($open); $step++) {
+            $manifest = $open[($wanted + $step) % count($open)];
+            $capacity = self::CAPACITY[$manifest->trailer_type->value] ?? 34;
+
+            if (($this->fill[$manifest->getKey()] ?? 0) < $capacity) {
+                $this->fill[$manifest->getKey()] = ($this->fill[$manifest->getKey()] ?? 0) + 1;
+
+                return $manifest;
+            }
+        }
+
+        return null;
     }
 
     /** Mostly small orders, with a few big ones that are likely to split. */
@@ -177,14 +268,32 @@ class SydneyFreightSeeder extends Seeder
         return $plan;
     }
 
+    /**
+     * Where an unloaded piece physically is. Most orders are binned in the
+     * Sydney bay; a few are part-binned, parked in holding, or not yet scanned.
+     */
+    private function dockState(int $index, int $piece): string
+    {
+        return match ($index % 9) {
+            0, 1, 2, 3, 4 => 'in_bay',
+            5, 6 => $piece % 2 === 1 ? 'in_bay' : 'received',
+            7 => 'holding',
+            default => 'pending',
+        };
+    }
+
     private function pallet(
         Consignment $consignment,
         string $connote,
         int $piece,
         ?Manifest $manifest,
         User $loader,
+        string $sender,
+        int $index,
     ): void {
         $barcode = sprintf('%s-%02d', $connote, $piece);
+        $dock = $manifest ? 'in_bay' : $this->dockState($index, $piece);
+        $dg = $this->dangerousGoods($sender, $index, $piece);
 
         $pallet = HandlingUnit::query()->updateOrCreate(
             ['barcode' => $barcode],
@@ -192,15 +301,41 @@ class SydneyFreightSeeder extends Seeder
                 'consignment_id' => $consignment->getKey(),
                 'piece_number' => $piece,
                 'weight_kg' => mt_rand(40, 900),
-                'current_status' => $manifest ? HandlingUnitStatus::Loaded : HandlingUnitStatus::Pending,
+                'dg_class' => $dg[0] ?? null,
+                'un_number' => $dg[1] ?? null,
+                'proper_shipping_name' => $dg[2] ?? null,
+                'is_food' => in_array($sender, self::FOOD_SENDERS, true),
+                'current_status' => match (true) {
+                    $manifest !== null => HandlingUnitStatus::Loaded,
+                    $dock === 'in_bay', $dock === 'holding' => HandlingUnitStatus::Staged,
+                    $dock === 'received' => HandlingUnitStatus::Received,
+                    default => HandlingUnitStatus::Pending,
+                },
+                'current_location_id' => match (true) {
+                    $manifest !== null, $dock === 'received', $dock === 'pending' => null,
+                    $dock === 'holding' => $this->holding->getKey(),
+                    default => $this->bay->getKey(),
+                },
             ],
         );
+
+        // Movement history: scanned in at the dock, then binned (unless it
+        // never made it past the dock or hasn't arrived).
+        if ($dock !== 'pending') {
+            $receivedAt = now()->subMinutes(mt_rand(300, 600));
+            $this->event($pallet, $loader, EventType::Received, $receivedAt, "rcv-{$barcode}", ['location_code' => 'MEL05']);
+
+            if ($dock !== 'received') {
+                $location = $dock === 'holding' ? $this->holding : $this->bay;
+                $this->event($pallet, $loader, EventType::Staged, $receivedAt->addMinutes(mt_rand(3, 20)), "stg-{$barcode}", ['location_code' => $location->code]);
+            }
+        }
 
         if (! $manifest) {
             return;
         }
 
-        $clientEventId = sprintf('00000000-0000-4000-8000-%012s', dechex(crc32("syd-{$barcode}")));
+        $clientEventId = $this->clientEventId("syd-{$barcode}");
         $loadedAt = now()->subMinutes(mt_rand(5, 240));
 
         ManifestItem::query()->updateOrCreate(
@@ -213,20 +348,57 @@ class SydneyFreightSeeder extends Seeder
             ],
         );
 
+        $this->event($pallet, $loader, EventType::Loaded, $loadedAt, "syd-{$barcode}", [
+            'manifest_id' => $manifest->getKey(),
+            'manifest_number' => $manifest->manifest_number,
+        ]);
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: string}|null
+     */
+    private function dangerousGoods(string $sender, int $index, int $piece): ?array
+    {
+        $products = self::DG_BY_SENDER[$sender] ?? null;
+
+        if (! $products) {
+            return null;
+        }
+
+        // Chemicals are all DG; pool/garden and auto parts mix DG with ordinary stock.
+        $isDg = $sender === 'Redfern Industrial Chemicals' || $piece % 3 === 1;
+
+        return $isDg ? $products[($index + $piece) % count($products)] : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    private function event(
+        HandlingUnit $pallet,
+        User $actor,
+        EventType $type,
+        \DateTimeInterface $at,
+        string $key,
+        array $metadata,
+    ): void {
+        $clientEventId = $this->clientEventId($key);
+
         OperationalEvent::query()->updateOrCreate(
             ['client_event_id' => $clientEventId],
             [
                 'handling_unit_id' => $pallet->getKey(),
-                'actor_id' => $loader->getKey(),
-                'event_type' => EventType::Loaded,
-                'occurred_at' => $loadedAt,
-                'received_at' => $loadedAt,
-                'metadata' => [
-                    'manifest_id' => $manifest->getKey(),
-                    'manifest_number' => $manifest->manifest_number,
-                    'seeded' => true,
-                ],
+                'actor_id' => $actor->getKey(),
+                'event_type' => $type,
+                'occurred_at' => $at,
+                'received_at' => $at,
+                'metadata' => $metadata + ['seeded' => true],
             ],
         );
+    }
+
+    private function clientEventId(string $key): string
+    {
+        return sprintf('00000000-0000-4000-8000-%012s', dechex(crc32($key)));
     }
 }

@@ -51,6 +51,10 @@ class LoadHandlingUnitController extends Controller
                 'barcode' => $handlingUnit->barcode,
                 'piece_number' => $handlingUnit->piece_number,
                 'connote_number' => $handlingUnit->consignment->connote_number,
+                'dg_class' => $handlingUnit->dg_class,
+                'un_number' => $handlingUnit->un_number,
+                'proper_shipping_name' => $handlingUnit->proper_shipping_name,
+                'is_food' => $handlingUnit->is_food,
                 'loaded_at' => $manifestItem->loaded_at?->toISOString(),
                 'loader' => [
                     'id' => $request->user()->getKey(),

@@ -32,6 +32,7 @@ class FixtureManifestSource implements ManifestSource
                 trailerLabel: 'MEL-SYD-260913',
                 trailerRegistration: null,
                 sourceUpdatedAt: $now,
+                departsAt: $now->addHours(2),
             ),
             new ManifestData(
                 externalId: 'fixture-mel-bne-today',

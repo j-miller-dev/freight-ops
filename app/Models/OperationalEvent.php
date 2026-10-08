@@ -3,12 +3,18 @@
 namespace App\Models;
 
 use App\Enums\EventType;
+use Carbon\CarbonInterface;
 use Database\Factories\OperationalEventFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property EventType $event_type
+ * @property CarbonInterface $occurred_at
+ * @property array<string, mixed>|null $metadata
+ */
 class OperationalEvent extends Model
 {
     /** @use HasFactory<OperationalEventFactory> */

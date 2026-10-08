@@ -4,14 +4,20 @@ namespace App\Http\Controllers\Loading;
 
 use App\Http\Controllers\Controller;
 use App\Models\Manifest;
+use App\Support\Loading\ManifestConsignmentBoard;
+use App\Support\Loading\ManifestSummary;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ShowManifestController extends Controller
 {
-    public function __invoke(Request $request, Manifest $manifest): Response
-    {
+    public function __invoke(
+        Request $request,
+        Manifest $manifest,
+        ManifestSummary $summary,
+        ManifestConsignmentBoard $board,
+    ): Response {
         $manifest->loadCount('manifestItems');
 
         $destination = $manifest->destinations()
@@ -24,9 +30,12 @@ class ShowManifestController extends Controller
                 'id',
                 'manifest_number',
                 'service_date',
+                'departs_at',
                 'status',
                 'manifest_items_count',
-            ]),
+            ]) + ['trailer_type' => $manifest->trailer_type->value],
+            'summary' => $summary->for($manifest),
+            'bay_code' => $board->bayFor($manifest)?->code,
             'destination' => $destination?->only(['id', 'code', 'name']),
         ]);
     }

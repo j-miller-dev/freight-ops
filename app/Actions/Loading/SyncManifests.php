@@ -26,6 +26,7 @@ class SyncManifests
                 'depot_id' => $depot->getKey(),
                 'manifest_number' => $data->manifestNumber,
                 'service_date' => $data->serviceDate,
+                'departs_at' => $data->departsAt,
                 'status' => $data->status,
                 'closed_at' => $data->status === 'closed' ? $data->sourceUpdatedAt : null,
                 'trailer_label' => $data->trailerLabel,

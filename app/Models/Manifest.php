@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TrailerType;
 use Carbon\CarbonInterface;
 use Database\Factories\ManifestFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,6 +12,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property TrailerType $trailer_type
+ * @property CarbonInterface|null $departs_at
+ */
 class Manifest extends Model
 {
     /** @use HasFactory<ManifestFactory> */
@@ -63,6 +68,8 @@ class Manifest extends Model
     {
         return [
             'service_date' => 'date',
+            'departs_at' => 'datetime',
+            'trailer_type' => TrailerType::class,
             'source_updated_at' => 'datetime',
             'last_synced_at' => 'datetime',
             'closed_at' => 'datetime',

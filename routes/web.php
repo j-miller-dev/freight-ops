@@ -2,11 +2,15 @@
 
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Loading\ListAvailableManifestsController;
+use App\Http\Controllers\Loading\ListManifestConsignmentsController;
 use App\Http\Controllers\Loading\LoadHandlingUnitController;
 use App\Http\Controllers\Loading\LoadingController;
+use App\Http\Controllers\Loading\ManifestSummaryController;
 use App\Http\Controllers\Loading\ShowDepotManifestsController;
+use App\Http\Controllers\Loading\ShowManifestConsignmentController;
 use App\Http\Controllers\Loading\ShowManifestController;
 use App\Http\Controllers\Loading\SimulateHandlingUnitScanController;
+use App\Http\Controllers\Loading\UpdateManifestTrailerController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -24,6 +28,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('loading/manifests/{manifest}', ShowManifestController::class)
         ->name('loading.manifest');
+
+    Route::get('loading/manifests/{manifest}/summary', ManifestSummaryController::class)
+        ->name('loading.manifest.summary');
+
+    Route::patch('loading/manifests/{manifest}/trailer', UpdateManifestTrailerController::class)
+        ->name('loading.manifest.trailer');
+
+    Route::get('loading/manifests/{manifest}/consignments', ListManifestConsignmentsController::class)
+        ->name('loading.manifest.consignments');
+
+    Route::get('loading/manifests/{manifest}/consignments/{consignment}', ShowManifestConsignmentController::class)
+        ->name('loading.manifest.consignment');
 
     Route::post('loading/manifests/{manifest}/scan', LoadHandlingUnitController::class)
         ->name('loading.scan');

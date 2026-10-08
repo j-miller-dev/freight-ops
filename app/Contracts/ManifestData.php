@@ -17,5 +17,6 @@ readonly class ManifestData
         public ?string $trailerLabel,
         public ?string $trailerRegistration,
         public CarbonInterface $sourceUpdatedAt,
+        public ?CarbonInterface $departsAt = null,
     ) {}
 }
