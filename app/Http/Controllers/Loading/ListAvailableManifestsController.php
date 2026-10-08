@@ -17,12 +17,15 @@ class ListAvailableManifestsController extends Controller
     {
         $validated = $request->validate([
             'destination_id' => ['required', 'uuid', 'exists:depots,id'],
+            'include_yesterday' => ['boolean'],
         ]);
 
         $destination = Depot::query()->findOrFail($validated['destination_id']);
 
+        $from = $request->boolean('include_yesterday') ? today()->subDay() : today();
+
         $manifests = Manifest::query()
-            ->whereDate('service_date', '>=', today()->subDay())
+            ->whereDate('service_date', '>=', $from)
             ->whereDate('service_date', '<=', today())
             ->whereHas(
                 'destinations',

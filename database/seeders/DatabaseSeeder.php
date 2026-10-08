@@ -25,7 +25,7 @@ class DatabaseSeeder extends Seeder
     {
         $loader = User::query()->updateOrCreate(
             ['email' => 'test@example.com'],
-            ['name' => 'Test User'],
+            ['name' => 'Test User', 'password' => bcrypt('password')],
         );
 
         $this->depot('MEL', 'Melbourne Cross-Dock', 'Australia/Melbourne');

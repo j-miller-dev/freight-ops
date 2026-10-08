@@ -203,3 +203,94 @@ it('returns previous assignment details before allowing an override', function (
         ->assertJsonPath('error.details.previous_loader_name', 'Original Loader')
         ->assertJsonPath('error.details.selected_manifest_number', $secondManifest->manifest_number);
 });
+
+it('omits yesterday manifests by default', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $yesterdayManifest = Manifest::factory()->create(['service_date' => today()->subDay(), 'status' => 'open']);
+    $yesterdayManifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $response = $this->actingAs($loader)->getJson(route('loading.manifests', [
+        'destination_id' => $destination->getKey(),
+    ]));
+
+    $response->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('includes yesterday manifests when requested', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $yesterdayManifest = Manifest::factory()->create(['service_date' => today()->subDay(), 'status' => 'open']);
+    $yesterdayManifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $response = $this->actingAs($loader)->getJson(route('loading.manifests', [
+        'destination_id' => $destination->getKey(),
+        'include_yesterday' => 1,
+    ]));
+
+    $response->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $yesterdayManifest->getKey());
+});
+
+it('shows consignment split details', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $selectedManifest = loadingManifest($destination);
+    $conflictManifest = loadingManifest($destination);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 2,
+    ]);
+
+    $firstPallet = HandlingUnit::factory()
+        ->for($consignment)
+        ->create(['current_status' => HandlingUnitStatus::Pending]);
+    $secondPallet = HandlingUnit::factory()
+        ->for($consignment)
+        ->create(['current_status' => HandlingUnitStatus::Pending]);
+
+    $this->actingAs($loader)->postJson(
+        route('loading.scan', $conflictManifest),
+        scanPayload($firstPallet),
+    )->assertCreated();
+
+    $response = $this->actingAs($loader)->postJson(
+        route('loading.scan', $selectedManifest),
+        scanPayload($secondPallet),
+    );
+
+    $response->assertStatus(409)
+        ->assertJsonPath('error.code', 'consignment_split')
+        ->assertJsonPath('error.details.total_count', 2)
+        ->assertJsonPath('error.details.on_selected_after_scan', 1)
+        ->assertJsonPath('error.details.conflicts.0.manifest_number', $conflictManifest->manifest_number)
+        ->assertJsonPath('error.details.conflicts.0.pallet_count', 1);
+});
+
+it('shows destination mismatch details', function () {
+    $loader = User::factory()->create();
+    $manifestDestination = Depot::factory()->create(['code' => 'SYD', 'name' => 'Sydney']);
+    $palletDestination = Depot::factory()->create(['code' => 'MEL', 'name' => 'Melbourne']);
+    $manifest = loadingManifest($manifestDestination);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $palletDestination->getKey(),
+        'item_count' => 1,
+    ]);
+    $pallet = HandlingUnit::factory()
+        ->for($consignment)
+        ->create(['current_status' => HandlingUnitStatus::Pending]);
+
+    $response = $this->actingAs($loader)->postJson(
+        route('loading.scan', $manifest),
+        scanPayload($pallet),
+    );
+
+    $response->assertStatus(422)
+        ->assertJsonPath('error.code', 'destination_mismatch')
+        ->assertJsonPath('error.details.destination_code', 'MEL')
+        ->assertJsonPath('error.details.destination_name', 'Melbourne')
+        ->assertJsonPath('error.details.manifest_number', $manifest->manifest_number);
+});

@@ -57,6 +57,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 422,
                     'details' => [
                         'destination_code' => $exception->palletDestination->code,
+                        'destination_name' => $exception->palletDestination->name,
                         'manifest_number' => $exception->selectedManifest->manifest_number,
                     ],
                 ],
@@ -83,6 +84,8 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => $exception->getMessage(),
                     'status' => 409,
                     'details' => [
+                        'total_count' => $exception->consignment->item_count,
+                        'on_selected_after_scan' => $exception->selectedManifest->manifestItems()->count() + 1,
                         'conflicts' => $exception->conflictsByManifest()
                             ->map(fn (array $conflict) => [
                                 'manifest_number' => $conflict['manifest']->manifest_number,
