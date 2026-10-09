@@ -37,6 +37,7 @@ function title(item: Item): string {
 export default function NotificationBell() {
     const [items, setItems] = useState<Item[]>([]);
     const [unread, setUnread] = useState(0);
+    const [menuOpen, setMenuOpen] = useState(false);
     const seen = useRef<number | null>(null);
 
     useEffect(() => {
@@ -77,6 +78,7 @@ export default function NotificationBell() {
     }, []);
 
     function open(item: Item) {
+        setMenuOpen(false);
         setItems((current) =>
             current.map((entry) =>
                 entry.id === item.id ? { ...entry, read: true } : entry,
@@ -104,7 +106,7 @@ export default function NotificationBell() {
     }
 
     return (
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
