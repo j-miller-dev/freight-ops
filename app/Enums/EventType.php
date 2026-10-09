@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum EventType: string
+enum EventType: string implements HasLabel
 {
     case Received = 'received';
     case Moved = 'moved';
@@ -13,4 +13,19 @@ enum EventType: string
     case ExceptionReported = 'exception_reported';
     case DgVerified = 'dg_verified';
     case EquipmentAssigned = 'equipment_assigned';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Received => 'Received',
+            self::Moved => 'Moved',
+            self::Staged => 'Staged',
+            self::Loaded => 'Loaded',
+            self::Unloaded => 'Unloaded',
+            self::Dispatched => 'Dispatched',
+            self::ExceptionReported => 'Exception Reported',
+            self::DgVerified => 'DG Verified',
+            self::EquipmentAssigned => 'Equipment Assigned',
+        };
+    }
 }

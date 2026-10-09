@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum TrailerType: string
+enum TrailerType: string implements HasLabel
 {
     case Rigid = 'rigid';
     case Semi = 'semi';
