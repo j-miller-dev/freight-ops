@@ -1,117 +1,125 @@
-import { Form, Head } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
 import InputError from '@/components/input-error';
-import PasskeyVerify from '@/components/passkey-verify';
-import PasswordInput from '@/components/password-input';
+import PinPad from '@/components/pin-pad';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
-import { store } from '@/routes/login';
-import { request } from '@/routes/password';
 
 type Props = {
     status?: string;
-    canResetPassword: boolean;
 };
 
-export default function Login({ status, canResetPassword }: Props) {
+export default function Login({ status }: Props) {
+    const form = useForm({ username: '', pin: '' });
+    const canSubmit =
+        form.data.username.trim() !== '' &&
+        form.data.pin.length >= 4 &&
+        !form.processing;
+
+    function submit() {
+        if (!canSubmit) {
+            return;
+        }
+
+        form.post('/login/pin', {
+            onFinish: () => form.reset('pin'),
+        });
+    }
+
     return (
         <>
             <Head title="Log in" />
 
-            <PasskeyVerify />
+            {/* Breaks out of the narrow auth card on wide screens so the keypad
+                and the Sign in button both fit on a tablet. */}
+            <div className="grid gap-6 md:relative md:left-1/2 md:w-[42rem] md:-translate-x-1/2 md:grid-cols-2 md:items-center md:gap-10">
+                <div className="space-y-6">
+                    <div className="grid gap-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                            id="username"
+                            value={form.data.username}
+                            onChange={(event) =>
+                                form.setData('username', event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    submit();
+                                }
+                            }}
+                            autoFocus
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            autoComplete="username"
+                            placeholder="first.last"
+                            className="h-14 rounded-xl text-lg"
+                        />
+                    </div>
 
-            <Form
-                {...store.form()}
-                resetOnSuccess={['password']}
-                className="flex flex-col gap-6"
-            >
-                {({ processing, errors }) => (
-                    <>
-                        <div className="grid gap-6">
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    required
-                                    autoFocus
-                                    tabIndex={1}
-                                    autoComplete="email"
-                                    placeholder="email@example.com"
-                                />
-                                <InputError message={errors.email} />
-                            </div>
+                    <InputError
+                        className="min-h-5 text-center"
+                        message={form.errors.pin ?? form.errors.username}
+                    />
 
-                            <div className="grid gap-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="password">Password</Label>
-                                    {canResetPassword && (
-                                        <TextLink
-                                            href={request()}
-                                            className="ml-auto text-sm"
-                                            tabIndex={5}
-                                        >
-                                            Forgot your password?
-                                        </TextLink>
-                                    )}
-                                </div>
-                                <PasswordInput
-                                    id="password"
-                                    name="password"
-                                    required
-                                    tabIndex={2}
-                                    autoComplete="current-password"
-                                    placeholder="Password"
-                                />
-                                <InputError message={errors.password} />
-                            </div>
+                    <Button
+                        type="button"
+                        size="xl"
+                        className="hidden w-full md:inline-flex"
+                        disabled={!canSubmit}
+                        onClick={submit}
+                        data-test="login-button"
+                    >
+                        {form.processing && <Spinner />}
+                        Sign in
+                    </Button>
 
-                            <div className="flex items-center space-x-3">
-                                <Checkbox
-                                    id="remember"
-                                    name="remember"
-                                    tabIndex={3}
-                                />
-                                <Label htmlFor="remember">Remember me</Label>
-                            </div>
-
-                            <Button
-                                type="submit"
-                                className="mt-4 w-full"
-                                tabIndex={4}
-                                disabled={processing}
-                                data-test="login-button"
-                            >
-                                {processing && <Spinner />}
-                                Log in
-                            </Button>
-                        </div>
-
-                        <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink href={register()} tabIndex={5}>
-                                Sign up
-                            </TextLink>
-                        </div>
-                    </>
-                )}
-            </Form>
-
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
+                    <p className="hidden text-center text-sm text-muted-foreground md:block">
+                        <TextLink href="/login/password">
+                            Use email and password instead
+                        </TextLink>
+                    </p>
                 </div>
-            )}
+
+                <PinPad
+                    value={form.data.pin}
+                    onChange={(pin) => form.setData('pin', pin)}
+                    onSubmit={submit}
+                    disabled={form.processing}
+                    invalid={Boolean(form.errors.pin)}
+                />
+
+                <div className="space-y-4 md:hidden">
+                    <Button
+                        type="button"
+                        size="xl"
+                        className="w-full"
+                        disabled={!canSubmit}
+                        onClick={submit}
+                    >
+                        {form.processing && <Spinner />}
+                        Sign in
+                    </Button>
+                    <p className="text-center text-sm text-muted-foreground">
+                        <TextLink href="/login/password">
+                            Use email and password instead
+                        </TextLink>
+                    </p>
+                </div>
+
+                {status && (
+                    <p className="text-center text-sm font-medium text-green-600 md:col-span-2">
+                        {status}
+                    </p>
+                )}
+            </div>
         </>
     );
 }
 
 Login.layout = {
-    title: 'Log in to your account',
-    description: 'Enter your email and password below to log in',
+    title: 'Welcome back',
+    description: 'Enter your username and PIN',
 };

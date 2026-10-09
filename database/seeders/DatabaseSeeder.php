@@ -25,7 +25,15 @@ class DatabaseSeeder extends Seeder
     {
         $loader = User::query()->updateOrCreate(
             ['email' => 'test@example.com'],
-            ['name' => 'Test User', 'password' => bcrypt('password')],
+            // Dev login: username jason.miller with the PIN below; change it with
+            // `php artisan freight:set-pin jason.miller`.
+            ['name' => 'Jason Miller', 'username' => 'jason.miller', 'password' => bcrypt('password'), 'pin' => '1234'],
+        );
+
+        // A scaler to receive "trailer finished" alerts: username sam.scaler, same dev PIN.
+        User::query()->updateOrCreate(
+            ['email' => 'sam.scaler@example.com'],
+            ['name' => 'Sam Scaler', 'username' => 'sam.scaler', 'password' => bcrypt('password'), 'pin' => '1234', 'role' => 'scaler', 'email_verified_at' => now()],
         );
 
         $this->depot('MEL', 'Melbourne Cross-Dock', 'Australia/Melbourne');

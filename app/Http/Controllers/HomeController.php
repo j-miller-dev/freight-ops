@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 class HomeController extends Controller
 {
-    public function __invoke(): Response
+    /** There is no public landing page: send people to where they work. */
+    public function __invoke(Request $request): RedirectResponse
     {
-        return Inertia::render('welcome');
+        return redirect()->route($request->user() ? 'dashboard' : 'login');
     }
 }

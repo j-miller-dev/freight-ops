@@ -1,7 +1,10 @@
 import { Link, usePage } from '@inertiajs/react';
 import { House, Truck, UserRound, WifiOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import NotificationBell from '@/components/notification-bell';
+import SessionExpiredDialog from '@/components/session-expired-dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,6 +13,7 @@ import {
 import { UserMenuContent } from '@/components/user-menu-content';
 import Wordmark from '@/components/wordmark';
 import { useOnlineStatus } from '@/hooks/use-online-status';
+import { onAuthExpired } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -20,6 +24,9 @@ type FooterItem = {
     // Path prefixes that keep this item highlighted.
     match: string[];
 };
+
+// Roles that close and dispatch trailers, and so get "trailer finished" alerts.
+const ALERT_ROLES = ['scaler', 'supervisor', 'admin'];
 
 const FOOTER_ITEMS: FooterItem[] = [
     {
@@ -41,6 +48,9 @@ export default function KioskLayout({ children }: { children: ReactNode }) {
     const { auth } = usePage().props;
     const { url } = usePage();
     const online = useOnlineStatus();
+    const [sessionExpired, setSessionExpired] = useState(false);
+
+    useEffect(() => onAuthExpired(() => setSessionExpired(true)), []);
     const path = url.split('?')[0];
 
     return (
@@ -55,6 +65,9 @@ export default function KioskLayout({ children }: { children: ReactNode }) {
                         <span className="flex items-center gap-1.5 rounded-full bg-warning px-3 py-1 font-medium text-warning-foreground">
                             <WifiOff className="size-4" /> Offline
                         </span>
+                    )}
+                    {ALERT_ROLES.includes(auth.user.role ?? '') && (
+                        <NotificationBell />
                     )}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -80,6 +93,13 @@ export default function KioskLayout({ children }: { children: ReactNode }) {
             <main className="mx-auto w-full max-w-5xl flex-1 p-4 pb-28 sm:p-6 sm:pb-28">
                 {children}
             </main>
+
+            <SessionExpiredDialog
+                open={sessionExpired}
+                username={auth.user.username ?? null}
+                name={auth.user.name}
+                onRestored={() => setSessionExpired(false)}
+            />
 
             <nav
                 aria-label="Primary"

@@ -26,6 +26,7 @@ class UserFactory extends Factory
     {
         return [
             'name' => fake()->name(),
+            'username' => fake()->unique()->userName(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
@@ -34,6 +35,19 @@ class UserFactory extends Factory
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
         ];
+    }
+
+    public function scaler(): static
+    {
+        return $this->state(fn (array $attributes) => ['role' => 'scaler']);
+    }
+
+    /**
+     * Indicate that the user can sign in with a PIN.
+     */
+    public function withPin(string $pin = '123456'): static
+    {
+        return $this->state(fn (array $attributes) => ['pin' => Hash::make($pin)]);
     }
 
     /**

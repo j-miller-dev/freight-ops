@@ -178,3 +178,76 @@ describe('flushOutbox', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });
+
+describe('flushOutbox when the session has expired', () => {
+    it.each([401, 419])(
+        'keeps the scan pending, spends no retry, and announces it on %i',
+        async (status) => {
+            await db.outbox.add(makeEntry());
+            mockFetch(status, { message: 'Unauthenticated.' });
+            const expired = vi.fn();
+            window.addEventListener('freight:auth-expired', expired);
+
+            const callbacks = makeCallbacks();
+            await flushOutbox(callbacks);
+
+            window.removeEventListener('freight:auth-expired', expired);
+
+            const [entry] = await db.outbox.toArray();
+            expect(entry.status).toBe('pending');
+            expect(entry.retry_count).toBe(0);
+            expect(expired).toHaveBeenCalledOnce();
+            expect(callbacks.onError).not.toHaveBeenCalled();
+        },
+    );
+
+    it('stops at the first expired scan so the rest are not burned', async () => {
+        await db.outbox.add(makeEntry({ client_event_id: 'a', created_at: 1 }));
+        await db.outbox.add(makeEntry({ client_event_id: 'b', created_at: 2 }));
+        mockFetch(401, { message: 'Unauthenticated.' });
+
+        await flushOutbox(makeCallbacks());
+
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(
+            (await db.outbox.toArray()).map((e) => [e.status, e.retry_count]),
+        ).toEqual([
+            ['pending', 0],
+            ['pending', 0],
+        ]);
+    });
+
+    it('delivers the scan once the session is back', async () => {
+        await db.outbox.add(makeEntry());
+        mockFetch(401, {});
+        await flushOutbox(makeCallbacks());
+
+        mockFetch(201, { data: { connote_number: 'CN-001' } });
+        const callbacks = makeCallbacks();
+        await flushOutbox(callbacks);
+
+        expect((await db.outbox.toArray())[0].status).toBe('synced');
+        expect(callbacks.onSynced).toHaveBeenCalledOnce();
+    });
+});
+
+describe('flushOutbox on a shared device', () => {
+    it("only sends the signed-in user's scans", async () => {
+        await db.outbox.add(makeEntry({ client_event_id: 'mine', user_id: 1 }));
+        await db.outbox.add(
+            makeEntry({ client_event_id: 'theirs', user_id: 2 }),
+        );
+        mockFetch(201, { data: {} });
+
+        await flushOutbox(makeCallbacks(), 1);
+
+        const byId = Object.fromEntries(
+            (await db.outbox.toArray()).map((e) => [
+                e.client_event_id,
+                e.status,
+            ]),
+        );
+        expect(byId).toEqual({ mine: 'synced', theirs: 'pending' });
+        expect(fetch).toHaveBeenCalledOnce();
+    });
+});

@@ -17,6 +17,8 @@ type Manifest = {
     manifest_number: string;
     service_date: string;
     departs_at: string | null;
+    loading_finished_at: string | null;
+    trailer: { name: string } | null;
     status: string;
     manifest_items_count: number;
 };
@@ -148,8 +150,18 @@ export default function LoadingDepot({ destination }: Props) {
                     const content = (
                         <>
                             <div className="min-w-0 flex-1">
-                                <p className="text-2xl font-bold tabular-nums">
+                                <p className="flex flex-wrap items-center gap-x-3 text-2xl font-bold tabular-nums">
                                     {manifest.manifest_number}
+                                    {manifest.trailer && (
+                                        <span className="rounded-full bg-muted px-2.5 py-0.5 text-sm font-semibold">
+                                            {manifest.trailer.name}
+                                        </span>
+                                    )}
+                                    {manifest.loading_finished_at && open && (
+                                        <span className="rounded-full bg-success px-2.5 py-0.5 text-sm font-semibold text-success-foreground">
+                                            Finished
+                                        </span>
+                                    )}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                     {formatServiceDate(manifest.service_date)}

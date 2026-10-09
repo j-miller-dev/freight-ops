@@ -5,16 +5,22 @@ namespace Database\Seeders;
 use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LocationType;
+use App\Enums\TrailerOwner;
 use App\Enums\TrailerType;
 use App\Models\Consignment;
 use App\Models\Depot;
 use App\Models\HandlingUnit;
 use App\Models\Location;
 use App\Models\Manifest;
+use App\Models\ManifestEquipment;
 use App\Models\ManifestItem;
 use App\Models\OperationalEvent;
+use App\Models\Trailer;
 use App\Models\User;
+use App\Notifications\ManifestLoadingFinished;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * A busy Sydney-bound day: many manifests (enough to page), and consignments in
@@ -113,6 +119,8 @@ class SydneyFreightSeeder extends Seeder
         for ($i = 1; $i <= self::CONSIGNMENT_COUNT; $i++) {
             $this->consignment($i, $sydney, $manifests, $loader);
         }
+
+        $this->equipmentAndFinish($manifests, $loader);
     }
 
     /**
@@ -123,6 +131,9 @@ class SydneyFreightSeeder extends Seeder
         // Minutes until each trailer departs; the last one has already left.
         $departures = [25, 100, 180, 300, 420, 540, -120];
         $trailers = [TrailerType::BDouble, TrailerType::BDouble, TrailerType::BTriple, TrailerType::BDouble, TrailerType::ADouble, TrailerType::BDouble, TrailerType::BDouble];
+        $fleet = $this->fleet();
+        // Which trailer carries each manifest: the own fleet plus two contractors.
+        $assigned = ['F-Ops 1', 'F-Ops 2', 'F-Ops 3', 'Russell Coight Transport', 'Dingo Creek Haulage', 'F-Ops 1', 'F-Ops 2'];
         $manifests = [];
 
         for ($n = 1; $n <= self::MANIFEST_COUNT; $n++) {
@@ -130,6 +141,9 @@ class SydneyFreightSeeder extends Seeder
                 ['source' => 'seed', 'external_id' => "seed-mel-syd-{$n}"],
                 [
                     'depot_id' => $origin->getKey(),
+                    'trailer_id' => $fleet[$assigned[$n - 1]]->getKey(),
+                    'loading_finished_at' => null,
+                    'loading_finished_by' => null,
                     'manifest_number' => sprintf('MEL-SYD-2610%02d', $n),
                     'service_date' => today()->toDateString(),
                     'departs_at' => now()->addMinutes($departures[$n - 1]),
@@ -150,6 +164,70 @@ class SydneyFreightSeeder extends Seeder
         }
 
         return $manifests;
+    }
+
+    /**
+     * @return array<string, Trailer>
+     */
+    private function fleet(): array
+    {
+        $fleet = [];
+
+        foreach (['F-Ops 1', 'F-Ops 2', 'F-Ops 3'] as $name) {
+            $fleet[$name] = Trailer::query()->updateOrCreate(
+                ['name' => $name],
+                ['owner' => TrailerOwner::Own, 'operator_name' => null, 'default_type' => TrailerType::BDouble, 'is_active' => true],
+            );
+        }
+
+        // Fictional contractors.
+        foreach (['Russell Coight Transport', 'Dingo Creek Haulage'] as $company) {
+            $fleet[$company] = Trailer::query()->updateOrCreate(
+                ['name' => $company],
+                ['owner' => TrailerOwner::Contractor, 'operator_name' => $company, 'default_type' => TrailerType::BDouble, 'is_active' => true],
+            );
+        }
+
+        return $fleet;
+    }
+
+    /**
+     * Equipment counts for the open trailers, and one trailer the loader has
+     * already finished, so the scaler has an alert waiting.
+     *
+     * @param  list<Manifest>  $manifests
+     */
+    private function equipmentAndFinish(array $manifests, User $loader): void
+    {
+        DB::table('notifications')->where('type', ManifestLoadingFinished::class)->delete();
+
+        $counts = [
+            0 => ['red_pallets' => 2, 'blue_pallets' => 1, 'straps' => 6],
+            1 => ['red_pallets' => 4, 'blue_pallets' => 2, 'straps' => 10, 'ratchets' => 8],
+            3 => ['angles' => 6, 'ratchets' => 8, 'straps' => 12, 'dogs' => 4, 'chains' => 2, 'plywood' => 3, 'red_pallets' => 5, 'blue_pallets' => 3],
+        ];
+
+        foreach ($counts as $index => $items) {
+            foreach ($items as $item => $quantity) {
+                ManifestEquipment::query()->updateOrCreate(
+                    ['manifest_id' => $manifests[$index]->getKey(), 'item' => $item],
+                    ['quantity' => $quantity],
+                );
+            }
+        }
+
+        $finished = $manifests[3];
+        $finished->forceFill(['loading_finished_at' => now()->subMinutes(12), 'loading_finished_by' => $loader->getKey()])->save();
+
+        Notification::send(
+            User::query()->where('role', 'scaler')->get(),
+            new ManifestLoadingFinished(
+                $finished->loadMissing('trailer'),
+                $loader,
+                $finished->manifestItems()->count(),
+                $counts[3],
+            ),
+        );
     }
 
     /**
