@@ -122,6 +122,7 @@ class ManifestConsignmentBoard
                 },
                 'dg_classes' => $unitFlags->pluck('dg_class')->filter()->unique()->sort()->values()->all(),
                 'has_food' => $unitFlags->contains('is_food', true),
+                'held_back' => $consignment->isHeldBack(),
             ];
         });
 
@@ -199,6 +200,10 @@ class ManifestConsignmentBoard
             'receiver_name' => $consignment->getAttribute('receiver_name'),
             'item_count' => $consignment->item_count,
             'pieces' => $pieces,
+            'held_back' => $consignment->isHeldBack(),
+            'held_back_reason' => $consignment->held_back_reason,
+            'held_back_by' => $consignment->heldBackBy?->name,
+            'held_back_at' => $consignment->held_back_at?->toISOString(),
         ];
     }
 }

@@ -3,11 +3,14 @@ import {
     ChevronLeft,
     ChevronRight,
     CircleCheck,
+    PauseCircle,
     Package,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AlertError from '@/components/alert-error';
 import DgDiamond from '@/components/loading/dg-diamond';
+import HoldBackDialog from '@/components/loading/hold-back-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Sheet,
@@ -16,7 +19,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import { getJson } from '@/lib/http';
+import { getJson, patchJson } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type {
     ConsignmentDetail,
@@ -113,6 +116,15 @@ function Flags({ dg, food }: { dg: string[]; food: boolean }) {
     );
 }
 
+function HoldBackBadge() {
+    return (
+        <Badge variant="secondary" className="gap-1">
+            <PauseCircle className="size-3" />
+            Hold
+        </Badge>
+    );
+}
+
 function PieceRow({ piece }: { piece: Piece }) {
     const [open, setOpen] = useState(false);
 
@@ -192,6 +204,8 @@ export default function ConsignmentSheet({
     const [detail, setDetail] = useState<ConsignmentDetail | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [holdBackDialogOpen, setHoldBackDialogOpen] = useState(false);
+    const [holdBackSubmitting, setHoldBackSubmitting] = useState(false);
 
     useEffect(() => {
         if (!open || selected) {
@@ -267,180 +281,274 @@ export default function ConsignmentSheet({
 
     const lastPage = list?.meta.last_page ?? 1;
 
+    async function setHoldBack(heldBack: boolean, reason: string) {
+        if (!selected) {
+            return;
+        }
+
+        setHoldBackSubmitting(true);
+        setError('');
+
+        try {
+            const json = await patchJson<{
+                data: {
+                    held_back: boolean;
+                    held_back_reason: string | null;
+                    held_back_by: string | null;
+                    held_back_at: string | null;
+                };
+            }>(
+                `/loading/manifests/${manifestId}/consignments/${selected}/hold-back`,
+                { held_back: heldBack, reason: reason || null },
+            );
+
+            setDetail((current) =>
+                current ? { ...current, ...json.data } : current,
+            );
+            setList((current) =>
+                current
+                    ? {
+                          ...current,
+                          data: current.data.map((row) =>
+                              row.id === selected
+                                  ? { ...row, held_back: json.data.held_back }
+                                  : row,
+                          ),
+                      }
+                    : current,
+            );
+            setHoldBackDialogOpen(false);
+        } catch {
+            setError('Unable to update hold back.');
+        } finally {
+            setHoldBackSubmitting(false);
+        }
+    }
+
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full gap-0 sm:max-w-2xl">
-                <SheetHeader className="border-b pr-12">
-                    <SheetTitle className="text-xl">
-                        Consignments on {manifestNumber}
-                    </SheetTitle>
-                    <SheetDescription>
-                        {selected
-                            ? 'Tap an item to see where it has been.'
-                            : 'Tap a consignment to see each item.'}
-                    </SheetDescription>
-                </SheetHeader>
+        <>
+            <Sheet open={open} onOpenChange={onOpenChange}>
+                <SheetContent className="w-full gap-0 sm:max-w-2xl">
+                    <SheetHeader className="border-b pr-12">
+                        <SheetTitle className="text-xl">
+                            Consignments on {manifestNumber}
+                        </SheetTitle>
+                        <SheetDescription>
+                            {selected
+                                ? 'Tap an item to see where it has been.'
+                                : 'Tap a consignment to see each item.'}
+                        </SheetDescription>
+                    </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto p-4">
-                    {error && <AlertError errors={[error]} />}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {error && <AlertError errors={[error]} />}
 
-                    {selected ? (
-                        <div className="space-y-3">
-                            <Button
-                                variant="outline"
-                                size="touch"
-                                onClick={() => {
-                                    setSelected(null);
-                                    setDetail(null);
-                                }}
-                            >
-                                <ChevronLeft /> Back to list
-                            </Button>
+                        {selected ? (
+                            <div className="space-y-3">
+                                <Button
+                                    variant="outline"
+                                    size="touch"
+                                    onClick={() => {
+                                        setSelected(null);
+                                        setDetail(null);
+                                    }}
+                                >
+                                    <ChevronLeft /> Back to list
+                                </Button>
 
-                            {detail && (
-                                <>
-                                    <div>
-                                        <p className="text-2xl font-bold tabular-nums">
-                                            {detail.connote_number}
-                                        </p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {detail.sender_name} →{' '}
-                                            {detail.receiver_name} ·{' '}
-                                            {detail.item_count} items
-                                        </p>
-                                    </div>
+                                {detail && (
+                                    <>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="flex items-center gap-2 text-2xl font-bold tabular-nums">
+                                                    {detail.connote_number}
+                                                    {detail.held_back && (
+                                                        <HoldBackBadge />
+                                                    )}
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {detail.sender_name} →{' '}
+                                                    {detail.receiver_name} ·{' '}
+                                                    {detail.item_count} items
+                                                </p>
+                                                {detail.held_back && (
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Held back by{' '}
+                                                        {detail.held_back_by}
+                                                        {detail.held_back_reason &&
+                                                            ` · ${detail.held_back_reason}`}
+                                                    </p>
+                                                )}
+                                            </div>
 
-                                    <ul className="space-y-2">
-                                        {detail.pieces.map((piece) => (
-                                            <PieceRow
-                                                key={piece.id}
-                                                piece={piece}
-                                            />
-                                        ))}
-                                    </ul>
-                                </>
-                            )}
-                        </div>
-                    ) : (
-                        <>
-                            <div className="mb-4 flex flex-wrap gap-2">
-                                {FILTERS.map((option) => (
-                                    <Button
-                                        key={option.value}
-                                        variant={
-                                            filter === option.value
-                                                ? 'default'
-                                                : 'outline'
-                                        }
-                                        aria-pressed={filter === option.value}
-                                        className="h-11 rounded-full"
-                                        onClick={() => {
-                                            setFilter(option.value);
-                                            setPage(1);
-                                        }}
-                                    >
-                                        {option.label}
-                                    </Button>
-                                ))}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={holdBackSubmitting}
+                                                onClick={() =>
+                                                    detail.held_back
+                                                        ? setHoldBack(false, '')
+                                                        : setHoldBackDialogOpen(
+                                                              true,
+                                                          )
+                                                }
+                                            >
+                                                {detail.held_back
+                                                    ? 'Release'
+                                                    : 'Hold back'}
+                                            </Button>
+                                        </div>
+
+                                        <ul className="space-y-2">
+                                            {detail.pieces.map((piece) => (
+                                                <PieceRow
+                                                    key={piece.id}
+                                                    piece={piece}
+                                                />
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
                             </div>
-
-                            {!loading && list?.data.length === 0 && (
-                                <p className="py-10 text-center text-muted-foreground">
-                                    No consignments match.
-                                </p>
-                            )}
-
-                            <ul className="space-y-3">
-                                {list?.data.map((row) => (
-                                    <li key={row.id}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelected(row.id)}
-                                            className={cn(
-                                                'flex w-full items-center gap-3 rounded-2xl border border-l-8 bg-card px-4 py-3 text-left shadow-xs transition active:scale-[0.99]',
-                                                STATE[row.state].border,
-                                            )}
+                        ) : (
+                            <>
+                                <div className="mb-4 flex flex-wrap gap-2">
+                                    {FILTERS.map((option) => (
+                                        <Button
+                                            key={option.value}
+                                            variant={
+                                                filter === option.value
+                                                    ? 'default'
+                                                    : 'outline'
+                                            }
+                                            aria-pressed={
+                                                filter === option.value
+                                            }
+                                            className="h-11 rounded-full"
+                                            onClick={() => {
+                                                setFilter(option.value);
+                                                setPage(1);
+                                            }}
                                         >
-                                            <Package className="size-6 shrink-0 text-muted-foreground" />
+                                            {option.label}
+                                        </Button>
+                                    ))}
+                                </div>
 
-                                            <span className="min-w-0 flex-1">
-                                                <span className="flex items-center gap-2">
-                                                    <span className="text-lg font-bold tabular-nums">
-                                                        {row.connote_number}
+                                {!loading && list?.data.length === 0 && (
+                                    <p className="py-10 text-center text-muted-foreground">
+                                        No consignments match.
+                                    </p>
+                                )}
+
+                                <ul className="space-y-3">
+                                    {list?.data.map((row) => (
+                                        <li key={row.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setSelected(row.id)
+                                                }
+                                                className={cn(
+                                                    'flex w-full items-center gap-3 rounded-2xl border border-l-8 bg-card px-4 py-3 text-left shadow-xs transition active:scale-[0.99]',
+                                                    STATE[row.state].border,
+                                                )}
+                                            >
+                                                <Package className="size-6 shrink-0 text-muted-foreground" />
+
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="text-lg font-bold tabular-nums">
+                                                            {row.connote_number}
+                                                        </span>
+                                                        <Flags
+                                                            dg={row.dg_classes}
+                                                            food={row.has_food}
+                                                        />
+                                                        {row.held_back && (
+                                                            <HoldBackBadge />
+                                                        )}
                                                     </span>
-                                                    <Flags
-                                                        dg={row.dg_classes}
-                                                        food={row.has_food}
-                                                    />
-                                                </span>
-                                                <span className="block truncate text-sm text-muted-foreground">
-                                                    {row.sender_name}
-                                                    {row.service_code &&
-                                                        ` · ${row.service_code}`}
-                                                </span>
-                                                <span className="block text-xs text-muted-foreground tabular-nums">
-                                                    {[
-                                                        row.on_other_trailers >
-                                                            0 &&
-                                                            `${row.on_other_trailers} on other trailers`,
-                                                        row.in_bay > 0 &&
-                                                            `${row.in_bay} in ${row.bay_code ?? 'bay'}`,
-                                                    ]
-                                                        .filter(Boolean)
-                                                        .join(' · ')}
-                                                </span>
-                                            </span>
-
-                                            <span className="text-right">
-                                                <span className="block text-2xl font-bold tabular-nums">
-                                                    {row.on_trailer}
-                                                    <span className="text-base font-normal text-muted-foreground">
-                                                        /{row.item_count}
+                                                    <span className="block truncate text-sm text-muted-foreground">
+                                                        {row.sender_name}
+                                                        {row.service_code &&
+                                                            ` · ${row.service_code}`}
+                                                    </span>
+                                                    <span className="block text-xs text-muted-foreground tabular-nums">
+                                                        {[
+                                                            row.on_other_trailers >
+                                                                0 &&
+                                                                `${row.on_other_trailers} on other trailers`,
+                                                            row.in_bay > 0 &&
+                                                                `${row.in_bay} in ${row.bay_code ?? 'bay'}`,
+                                                        ]
+                                                            .filter(Boolean)
+                                                            .join(' · ')}
                                                     </span>
                                                 </span>
-                                                <span
-                                                    className={cn(
-                                                        'mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                                                        STATE[row.state].chip,
-                                                    )}
-                                                >
-                                                    {STATE[row.state].label(
-                                                        row,
-                                                    )}
-                                                </span>
-                                            </span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </>
-                    )}
-                </div>
 
-                {!selected && lastPage > 1 && (
-                    <div className="flex items-center justify-between gap-4 border-t p-4">
-                        <Button
-                            variant="warning"
-                            size="touch"
-                            onClick={() => setPage(page - 1)}
-                            disabled={page <= 1}
-                        >
-                            <ChevronLeft /> Prev
-                        </Button>
-                        <p className="text-muted-foreground tabular-nums">
-                            {page} of {lastPage}
-                        </p>
-                        <Button
-                            variant="warning"
-                            size="touch"
-                            onClick={() => setPage(page + 1)}
-                            disabled={page >= lastPage}
-                        >
-                            Next <ChevronRight />
-                        </Button>
+                                                <span className="text-right">
+                                                    <span className="block text-2xl font-bold tabular-nums">
+                                                        {row.on_trailer}
+                                                        <span className="text-base font-normal text-muted-foreground">
+                                                            /{row.item_count}
+                                                        </span>
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                                                            STATE[row.state]
+                                                                .chip,
+                                                        )}
+                                                    >
+                                                        {STATE[row.state].label(
+                                                            row,
+                                                        )}
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        )}
                     </div>
-                )}
-            </SheetContent>
-        </Sheet>
+
+                    {!selected && lastPage > 1 && (
+                        <div className="flex items-center justify-between gap-4 border-t p-4">
+                            <Button
+                                variant="warning"
+                                size="touch"
+                                onClick={() => setPage(page - 1)}
+                                disabled={page <= 1}
+                            >
+                                <ChevronLeft /> Prev
+                            </Button>
+                            <p className="text-muted-foreground tabular-nums">
+                                {page} of {lastPage}
+                            </p>
+                            <Button
+                                variant="warning"
+                                size="touch"
+                                onClick={() => setPage(page + 1)}
+                                disabled={page >= lastPage}
+                            >
+                                Next <ChevronRight />
+                            </Button>
+                        </div>
+                    )}
+                </SheetContent>
+            </Sheet>
+
+            {detail && (
+                <HoldBackDialog
+                    connoteNumber={detail.connote_number}
+                    open={holdBackDialogOpen}
+                    onOpenChange={setHoldBackDialogOpen}
+                    onConfirm={(reason) => setHoldBack(true, reason)}
+                    submitting={holdBackSubmitting}
+                />
+            )}
+        </>
     );
 }

@@ -10,6 +10,7 @@ use App\Http\Controllers\Loading\ShowDepotManifestsController;
 use App\Http\Controllers\Loading\ShowManifestConsignmentController;
 use App\Http\Controllers\Loading\ShowManifestController;
 use App\Http\Controllers\Loading\SimulateHandlingUnitScanController;
+use App\Http\Controllers\Loading\UpdateConsignmentHoldBackController;
 use App\Http\Controllers\Loading\UpdateManifestItemPositionController;
 use App\Http\Controllers\Loading\UpdateManifestTrailerController;
 use Illuminate\Support\Facades\Route;
@@ -44,6 +45,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('loading/manifests/{manifest}/consignments/{consignment}', ShowManifestConsignmentController::class)
         ->name('loading.manifest.consignment');
+
+    Route::patch('loading/manifests/{manifest}/consignments/{consignment}/hold-back', UpdateConsignmentHoldBackController::class)
+        ->name('loading.manifest.consignment.hold-back');
 
     Route::post('loading/manifests/{manifest}/scan', LoadHandlingUnitController::class)
         ->name('loading.scan');

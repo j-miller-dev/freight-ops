@@ -51,6 +51,7 @@ export type ConsignmentRow = {
     state: ConsignmentState;
     dg_classes: string[];
     has_food: boolean;
+    held_back: boolean;
 };
 
 export type PieceState =
@@ -88,4 +89,8 @@ export type ConsignmentDetail = {
     receiver_name: string | null;
     item_count: number;
     pieces: Piece[];
+    held_back: boolean;
+    held_back_reason: string | null;
+    held_back_by: string | null;
+    held_back_at: string | null;
 };

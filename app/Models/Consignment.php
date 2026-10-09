@@ -6,6 +6,7 @@ use Database\Factories\ConsignmentFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
@@ -22,6 +23,27 @@ class Consignment extends Model
     public function handlingUnits(): HasMany
     {
         return $this->hasMany(HandlingUnit::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function heldBackBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'held_back_by');
+    }
+
+    /**
+     * @return HasMany<ConsignmentHoldBackEvent, $this>
+     */
+    public function holdBackEvents(): HasMany
+    {
+        return $this->hasMany(ConsignmentHoldBackEvent::class);
+    }
+
+    public function isHeldBack(): bool
+    {
+        return $this->held_back_at !== null;
     }
 
     /**
@@ -46,6 +68,7 @@ class Consignment extends Model
     {
         return [
             'item_count' => 'integer',
+            'held_back_at' => 'datetime',
         ];
     }
 }
