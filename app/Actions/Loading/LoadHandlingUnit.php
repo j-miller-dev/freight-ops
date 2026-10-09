@@ -1,0 +1,271 @@
+<?php
+
+namespace App\Actions\Loading;
+
+use App\Enums\EventType;
+use App\Enums\HandlingUnitStatus;
+use App\Enums\LoadWarningType;
+use App\Exceptions\Loading\ClientEventConflict;
+use App\Exceptions\Loading\ConsignmentSplit;
+use App\Exceptions\Loading\DestinationMismatch;
+use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
+use App\Exceptions\Loading\ManifestNotOpen;
+use App\Models\Depot;
+use App\Models\HandlingUnit;
+use App\Models\Manifest;
+use App\Models\ManifestItem;
+use App\Models\OperationalEvent;
+use App\Models\User;
+use App\Models\WarningAcknowledgement;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
+
+class LoadHandlingUnit
+{
+    public function handle(
+        Manifest $manifest,
+        HandlingUnit $handlingUnit,
+        User $loader,
+        string $clientEventId,
+        CarbonInterface $occurredAt,
+        array $acknowledgedWarnings = [],
+    ): ManifestItem {
+        return DB::transaction(function () use (
+            $manifest,
+            $handlingUnit,
+            $loader,
+            $clientEventId,
+            $occurredAt,
+            $acknowledgedWarnings,
+        ): ManifestItem {
+            $processedEvent = OperationalEvent::query()
+                ->where('client_event_id', $clientEventId)
+                ->first();
+
+            if ($processedEvent !== null) {
+                $eventManifestId = $processedEvent->metadata['manifest_id'] ?? null;
+
+                if (
+                    (string) $processedEvent->handling_unit_id !== (string) $handlingUnit->getKey()
+                    || (string) $eventManifestId !== (string) $manifest->getKey()
+                ) {
+                    throw new ClientEventConflict(
+                        existingEvent: $processedEvent,
+                        handlingUnitId: (string) $handlingUnit->getKey(),
+                        manifestId: (string) $manifest->getKey(),
+                    );
+                }
+
+                return ManifestItem::query()
+                    ->where('handling_unit_id', $handlingUnit->getKey())
+                    ->where('manifest_id', $manifest->getKey())
+                    ->firstOrFail();
+            }
+
+            $lockedManifest = Manifest::query()
+                ->lockForUpdate()
+                ->findOrFail($manifest->getKey());
+
+            if ($lockedManifest->status !== 'open') {
+                throw new ManifestNotOpen($lockedManifest);
+            }
+            $lockedHandlingUnit = HandlingUnit::query()
+                ->lockForUpdate()
+                ->findOrFail($handlingUnit->getKey());
+
+            $existingAssignment = ManifestItem::query()
+                ->where('handling_unit_id', $lockedHandlingUnit->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingAssignment !== null) {
+                if ($existingAssignment->manifest_id === $lockedManifest->getKey()) {
+                    return $existingAssignment;
+                }
+
+                $acknowledged = in_array(
+                    LoadWarningType::AlreadyAssigned,
+                    $acknowledgedWarnings,
+                    true,
+                );
+
+                if (! $acknowledged) {
+                    throw new HandlingUnitAlreadyAssigned(
+                        existingAssignment: $existingAssignment,
+                        selectedManifest: $lockedManifest,
+                    );
+                }
+
+                $originalManifestId = $existingAssignment->manifest_id;
+                $originalManifestNumber = $existingAssignment->manifest->manifest_number;
+
+                $existingAssignment->manifest_id = $lockedManifest->getKey();
+                $existingAssignment->loaded_by = $loader->getKey();
+                $existingAssignment->client_event_id = $clientEventId;
+                $existingAssignment->loaded_at = $occurredAt;
+                $existingAssignment->save();
+                $existingAssignment->setRelation('manifest', $lockedManifest);
+
+                $acknowledgement = new WarningAcknowledgement;
+                $acknowledgement->warning_type = LoadWarningType::AlreadyAssigned;
+                $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
+                $acknowledgement->manifest_id = $lockedManifest->getKey();
+                $acknowledgement->conflicting_manifest_id = $originalManifestId;
+                $acknowledgement->acknowledged_by = $loader->getKey();
+                $acknowledgement->client_event_id = $clientEventId;
+                $acknowledgement->acknowledged_at = $occurredAt;
+                $acknowledgement->save();
+
+                $lockedHandlingUnit->current_status = HandlingUnitStatus::Loaded;
+                $lockedHandlingUnit->save();
+
+                $this->recordLoadedEvent(
+                    handlingUnit: $lockedHandlingUnit,
+                    manifest: $lockedManifest,
+                    loader: $loader,
+                    clientEventId: $clientEventId,
+                    occurredAt: $occurredAt,
+                    eventType: EventType::Moved,
+                    metadata: [
+                        'from_manifest_id' => $originalManifestId,
+                        'from_manifest_number' => $originalManifestNumber,
+                    ],
+                );
+
+                return $existingAssignment;
+            }
+            $consignment = $lockedHandlingUnit->consignment()->firstOrFail();
+
+            $destinationMismatch = ! $lockedManifest->destinations()
+                ->whereKey($consignment->destination_depot_id)
+                ->exists();
+
+            $destinationMismatchAcknowledged = in_array(
+                LoadWarningType::DestinationMismatch,
+                $acknowledgedWarnings,
+                true,
+            );
+
+            if ($destinationMismatch && ! $destinationMismatchAcknowledged) {
+                $palletDestination = Depot::query()
+                    ->findOrFail($consignment->destination_depot_id);
+
+                throw new DestinationMismatch(
+                    palletDestination: $palletDestination,
+                    selectedManifest: $lockedManifest,
+                );
+            }
+
+            $conflictingAssignments = $consignment->manifestItems()
+                ->where('manifest_items.manifest_id', '!=', $lockedManifest->getKey())
+                ->with('manifest')
+                ->get();
+
+            $consignmentSplit = $conflictingAssignments->isNotEmpty();
+
+            $consignmentSplitAcknowledged = in_array(
+                LoadWarningType::ConsignmentSplit,
+                $acknowledgedWarnings,
+                true,
+            );
+
+            if ($consignmentSplit && ! $consignmentSplitAcknowledged) {
+                throw new ConsignmentSplit(
+                    consignment: $consignment,
+                    conflictingAssignments: $conflictingAssignments,
+                    selectedManifest: $lockedManifest,
+                );
+            }
+
+            $selectedManifestPalletCount = $lockedManifest->manifestItems()->count();
+
+            $manifestItem = new ManifestItem;
+            $manifestItem->manifest_id = $lockedManifest->getKey();
+            $manifestItem->handling_unit_id = $lockedHandlingUnit->getKey();
+            $manifestItem->loaded_by = $loader->getKey();
+            $manifestItem->client_event_id = $clientEventId;
+            $manifestItem->loaded_at = $occurredAt;
+            $manifestItem->save();
+
+            if ($consignmentSplit) {
+                $acknowledgement = new WarningAcknowledgement;
+                $acknowledgement->warning_type = LoadWarningType::ConsignmentSplit;
+                $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
+                $acknowledgement->manifest_id = $lockedManifest->getKey();
+                $acknowledgement->conflicting_manifest_id =
+                    $conflictingAssignments->first()->manifest_id;
+                $acknowledgement->acknowledged_by = $loader->getKey();
+                $acknowledgement->client_event_id = $clientEventId;
+                $acknowledgement->acknowledged_at = $occurredAt;
+                $acknowledgement->metadata = [
+                    'consignment_id' => $consignment->getKey(),
+                    'connote_number' => $consignment->connote_number,
+                    'total_pallet_count' => $consignment->item_count,
+                    'loaded_elsewhere_count' => $conflictingAssignments->count(),
+                    'selected_manifest_pallet_count' => $selectedManifestPalletCount,
+                    'selected_manifest_pallet_count_after_scan' => $selectedManifestPalletCount + 1,
+                    'conflicting_manifests' => $conflictingAssignments
+                        ->groupBy('manifest_id')
+                        ->map(fn ($assignments): array => [
+                            'manifest_id' => $assignments->first()->manifest_id,
+                            'manifest_number' => $assignments->first()->manifest->manifest_number,
+                            'pallet_count' => $assignments->count(),
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+                $acknowledgement->save();
+            }
+
+            $lockedHandlingUnit->current_status = HandlingUnitStatus::Loaded;
+            $lockedHandlingUnit->save();
+
+            $this->recordLoadedEvent(
+                handlingUnit: $lockedHandlingUnit,
+                manifest: $lockedManifest,
+                loader: $loader,
+                clientEventId: $clientEventId,
+                occurredAt: $occurredAt,
+            );
+
+            if ($destinationMismatch) {
+                $acknowledgement = new WarningAcknowledgement;
+                $acknowledgement->warning_type = LoadWarningType::DestinationMismatch;
+                $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
+                $acknowledgement->manifest_id = $lockedManifest->getKey();
+                $acknowledgement->acknowledged_by = $loader->getKey();
+                $acknowledgement->client_event_id = $clientEventId;
+                $acknowledgement->acknowledged_at = $occurredAt;
+                $acknowledgement->metadata = [
+                    'pallet_destination_id' => $consignment->destination_depot_id,
+                ];
+                $acknowledgement->save();
+            }
+
+            return $manifestItem;
+        });
+    }
+
+    private function recordLoadedEvent(
+        HandlingUnit $handlingUnit,
+        Manifest $manifest,
+        User $loader,
+        string $clientEventId,
+        CarbonInterface $occurredAt,
+        EventType $eventType = EventType::Loaded,
+        array $metadata = [],
+    ): void {
+        $event = new OperationalEvent;
+        $event->client_event_id = $clientEventId;
+        $event->handling_unit_id = $handlingUnit->getKey();
+        $event->actor_id = $loader->getKey();
+        $event->event_type = $eventType;
+        $event->occurred_at = $occurredAt;
+        $event->received_at = now();
+        $event->metadata = array_merge([
+            'manifest_id' => $manifest->getKey(),
+            'manifest_number' => $manifest->manifest_number,
+        ], $metadata);
+        $event->save();
+    }
+}

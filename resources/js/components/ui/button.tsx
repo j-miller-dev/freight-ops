@@ -18,6 +18,10 @@ const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
+        warning:
+          "bg-warning text-warning-foreground shadow-xs hover:bg-warning/90",
+        success:
+          "bg-success text-success-foreground shadow-xs hover:bg-success/90",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
@@ -25,6 +29,8 @@ const buttonVariants = cva(
         sm: "h-8 rounded-md px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
         icon: "size-9",
+        touch: "h-14 rounded-xl px-6 text-base has-[>svg]:px-5 [&_svg:not([class*='size-'])]:size-5",
+        xl: "h-20 rounded-2xl px-8 text-xl font-semibold has-[>svg]:px-6 [&_svg:not([class*='size-'])]:size-7",
       },
     },
     defaultVariants: {

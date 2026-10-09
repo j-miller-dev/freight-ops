@@ -16,10 +16,12 @@
 .env.backup
 .env.production
 .phpactor.json
+.php-cs-fixer.cache
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
 npm-debug.log
+nvim.log
 yarn-error.log
 /auth.json
 /.fleet
@@ -32,3 +34,4 @@ yarn-error.log
 /BLUEPRINT.md
 /resources/docs/*.md
 /resources/docs/explanations/
+/docs/*-walkthrough.md

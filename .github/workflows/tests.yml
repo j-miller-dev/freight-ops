@@ -48,5 +48,8 @@ jobs:
       - name: Setup Application
         run: composer setup
 
+      - name: Create testing database
+        run: mysql -h 127.0.0.1 -P 3306 -uroot -e "CREATE DATABASE IF NOT EXISTS testing;"
+
       - name: Run CI Checks
         run: composer ci:check
