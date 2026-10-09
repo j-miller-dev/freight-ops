@@ -1,10 +1,12 @@
 <?php
 
+use App\Enums\HandlingUnitStatus;
 use App\Models\Consignment;
 use App\Models\ConsignmentHoldBackEvent;
 use App\Models\Depot;
 use App\Models\HandlingUnit;
 use App\Models\Manifest;
+use App\Models\ManifestItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -115,7 +117,12 @@ it('surfaces held_back on the consignment board and detail', function () {
         'held_back_by' => User::factory()->create()->getKey(),
         'held_back_reason' => 'no rush',
     ]);
-    HandlingUnit::factory()->for($consignment)->create(['piece_number' => 1]);
+    $pallet = HandlingUnit::factory()->for($consignment)->create(['piece_number' => 1]);
+    ManifestItem::factory()->create([
+        'manifest_id' => $manifest->getKey(),
+        'handling_unit_id' => $pallet->getKey(),
+    ]);
+    $pallet->forceFill(['current_status' => HandlingUnitStatus::Loaded])->save();
 
     $this->actingAs(User::factory()->create())
         ->getJson(route('loading.manifest.consignments', $manifest))

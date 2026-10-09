@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Loading;
 use App\Actions\Loading\SetConsignmentHoldBack;
 use App\Http\Controllers\Controller;
 use App\Models\Consignment;
+use App\Models\Manifest;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,7 @@ class UpdateConsignmentHoldBackController extends Controller
 {
     public function __invoke(
         Request $request,
+        Manifest $manifest,
         Consignment $consignment,
         SetConsignmentHoldBack $action,
     ): JsonResponse {
