@@ -17,6 +17,11 @@ const sidebarNavItems: NavItem[] = [
         icon: null,
     },
     {
+        title: 'PIN',
+        href: '/settings/pin',
+        icon: null,
+    },
+    {
         title: 'Security',
         href: editSecurity(),
         icon: null,

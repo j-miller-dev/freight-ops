@@ -9,12 +9,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property TrailerType $trailer_type
  * @property CarbonInterface|null $departs_at
+ * @property CarbonInterface|null $loading_finished_at
  */
 class Manifest extends Model
 {
@@ -34,6 +36,30 @@ class Manifest extends Model
             'manifest_id',
             'destination_depot_id',
         )->withPivot('is_primary');
+    }
+
+    /**
+     * @return BelongsTo<Trailer, $this>
+     */
+    public function trailer(): BelongsTo
+    {
+        return $this->belongsTo(Trailer::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function finishedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'loading_finished_by');
+    }
+
+    /**
+     * @return HasMany<ManifestEquipment, $this>
+     */
+    public function equipment(): HasMany
+    {
+        return $this->hasMany(ManifestEquipment::class);
     }
 
     /**
@@ -69,6 +95,7 @@ class Manifest extends Model
         return [
             'service_date' => 'date',
             'departs_at' => 'datetime',
+            'loading_finished_at' => 'datetime',
             'trailer_type' => TrailerType::class,
             'source_updated_at' => 'datetime',
             'last_synced_at' => 'datetime',

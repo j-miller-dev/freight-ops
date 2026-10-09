@@ -1,13 +1,12 @@
-function xsrfToken(): string | undefined {
-    const raw = document.cookie
-        .split('; ')
-        .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
-        ?.split('=')[1];
-
-    return raw ? decodeURIComponent(raw) : undefined;
-}
+import { isAuthFailure, notifyAuthExpired, xsrfToken } from '@/lib/session';
 
 async function fail(response: Response): Promise<never> {
+    if (isAuthFailure(response)) {
+        notifyAuthExpired();
+
+        throw new Error('Your session expired. Sign in to continue.');
+    }
+
     let message = `Request failed (${response.status})`;
 
     try {
@@ -35,29 +34,43 @@ export async function getJson<T>(
         signal,
     });
 
-    if (!response.ok) {
+    if (!response.ok || response.redirected) {
         return fail(response);
     }
 
     return (await response.json()) as T;
 }
 
-export async function patchJson<T>(url: string, body: unknown): Promise<T> {
+async function sendJson<T>(
+    method: 'POST' | 'PATCH' | 'DELETE',
+    url: string,
+    body?: unknown,
+): Promise<T> {
     const token = xsrfToken();
     const response = await fetch(url, {
-        method: 'PATCH',
+        method,
         credentials: 'same-origin',
         headers: {
             ...JSON_HEADERS,
-            'Content-Type': 'application/json',
+            ...(body === undefined
+                ? {}
+                : { 'Content-Type': 'application/json' }),
             ...(token ? { 'X-XSRF-TOKEN': token } : {}),
         },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
     });
 
-    if (!response.ok) {
+    if (!response.ok || response.redirected) {
         return fail(response);
     }
 
     return (await response.json()) as T;
 }
+
+export const patchJson = <T>(url: string, body: unknown) =>
+    sendJson<T>('PATCH', url, body);
+
+export const postJson = <T>(url: string, body?: unknown) =>
+    sendJson<T>('POST', url, body);
+
+export const deleteJson = <T>(url: string) => sendJson<T>('DELETE', url);

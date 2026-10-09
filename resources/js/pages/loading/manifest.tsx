@@ -3,6 +3,7 @@ import {
     Camera,
     CameraOff,
     ChevronRight,
+    CircleCheck,
     Keyboard,
     ListChecks,
     Truck,
@@ -13,7 +14,9 @@ import { toast } from 'sonner';
 import AlertError from '@/components/alert-error';
 import ConsignmentSheet from '@/components/loading/consignment-sheet';
 import DepartureBadge from '@/components/loading/departure-badge';
+import FinishDialog from '@/components/loading/finish-dialog';
 import ScanFeedback from '@/components/loading/scan-feedback';
+import Stepper from '@/components/loading/stepper';
 import TrailerAlerts, {
     ClashBanner,
 } from '@/components/loading/trailer-alerts';
@@ -24,13 +27,18 @@ import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
+import { useEquipment } from '@/hooks/use-equipment';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
 import { useManifestSummary } from '@/hooks/use-manifest-summary';
-import { patchJson } from '@/lib/http';
+import { deleteJson, patchJson, postJson } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type {
     DgItem,
+    EquipmentCounts,
+    EquipmentItemDef,
+    FinishedState,
     ManifestSummary,
+    TrailerInfo,
     TrailerPosition,
     TrailerTypeOption,
 } from '@/types/loading';
@@ -50,6 +58,10 @@ type Props = {
     summary: ManifestSummary;
     bay_code: string | null;
     trailer_types: TrailerTypeOption[];
+    trailer: TrailerInfo | null;
+    finished: FinishedState;
+    equipment: EquipmentCounts;
+    equipment_items: EquipmentItemDef[];
 };
 
 export default function LoadingManifest({
@@ -57,6 +69,10 @@ export default function LoadingManifest({
     destination,
     summary: initialSummary,
     trailer_types: trailerTypes,
+    trailer: trailerInfoProp,
+    finished: initialFinished,
+    equipment: initialEquipment,
+    equipment_items: equipmentItems,
 }: Props) {
     const scanner = useManifestScanner(manifest.id);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -114,7 +130,16 @@ export default function LoadingManifest({
         dgItems.find((item) => item.id === (activeId ?? defaultActiveId)) ??
         null;
 
-    const closed = manifest.status !== 'open';
+    const { counts, setCounts, adjust } = useEquipment(
+        manifest.id,
+        initialEquipment,
+    );
+    const [finished, setFinished] = useState(initialFinished);
+    const [finishOpen, setFinishOpen] = useState(false);
+
+    // A manifest the scaler closed, or one the loader has signed off, takes no
+    // more scans (reopen to carry on).
+    const closed = manifest.status !== 'open' || finished !== null;
     const { outbox } = scanner;
     const busy = scanner.scanning || scanner.simulating;
     const progress = scanner.result?.progress;
@@ -169,6 +194,34 @@ export default function LoadingManifest({
         }
     }
 
+    async function finishLoading(equipment: EquipmentCounts): Promise<boolean> {
+        try {
+            const json = await postJson<{
+                data: { finished: FinishedState; equipment: EquipmentCounts };
+            }>(`/loading/manifests/${manifest.id}/finish`, { equipment });
+
+            setFinished(json.data.finished);
+            setCounts(json.data.equipment);
+            setFinishOpen(false);
+            toast.success('Trailer finished. The scaler has been told.');
+
+            return true;
+        } catch (error) {
+            toast.error((error as Error).message);
+
+            return false;
+        }
+    }
+
+    async function reopenLoading() {
+        try {
+            await deleteJson(`/loading/manifests/${manifest.id}/finish`);
+            setFinished(null);
+        } catch (error) {
+            toast.error((error as Error).message);
+        }
+    }
+
     function handleMapOpenChange(open: boolean) {
         setMapOpen(open);
 
@@ -187,11 +240,12 @@ export default function LoadingManifest({
 
             <PageHeader
                 title={`Manifest ${manifest.manifest_number}`}
-                subtitle={
-                    destination
-                        ? `${destination.code} · ${destination.name}`
-                        : undefined
-                }
+                subtitle={[
+                    trailerInfoProp?.name,
+                    destination && `${destination.code} · ${destination.name}`,
+                ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 backHref={
                     destination
                         ? `/loading/depots/${destination.id}`
@@ -218,7 +272,7 @@ export default function LoadingManifest({
                         Some scans could not be delivered. Tell a supervisor.
                     </p>
                 )}
-                {closed && (
+                {manifest.status !== 'open' && (
                     <p className="rounded-xl bg-muted px-4 py-3 font-medium">
                         This manifest is closed. Scanning is disabled.
                     </p>
@@ -289,6 +343,56 @@ export default function LoadingManifest({
                     <TrailerAlerts summary={summary} />
                 </button>
             </section>
+
+            {finished ? (
+                <section className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/15 px-4 py-3">
+                    <CircleCheck className="size-6 shrink-0 text-success" />
+                    <p className="min-w-0 flex-1 font-medium">
+                        Loading finished
+                        {finished.by ? ` by ${finished.by}` : ''} at{' '}
+                        {new Date(finished.at).toLocaleTimeString([], {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                        })}
+                        . The scaler has been told.
+                    </p>
+                    <Button
+                        variant="outline"
+                        className="h-11 rounded-xl"
+                        onClick={() => void reopenLoading()}
+                    >
+                        Reopen to keep loading
+                    </Button>
+                </section>
+            ) : (
+                manifest.status === 'open' && (
+                    <section className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                        <Stepper
+                            label="Red pallets"
+                            swatch="bg-red-500"
+                            value={counts.red_pallets ?? 0}
+                            onChange={(delta) =>
+                                void adjust('red_pallets', delta)
+                            }
+                        />
+                        <Stepper
+                            label="Blue pallets"
+                            swatch="bg-blue-500"
+                            value={counts.blue_pallets ?? 0}
+                            onChange={(delta) =>
+                                void adjust('blue_pallets', delta)
+                            }
+                        />
+                        <Button
+                            variant="success"
+                            className="h-auto min-h-14 rounded-2xl px-6 text-base font-semibold"
+                            onClick={() => setFinishOpen(true)}
+                        >
+                            <CircleCheck className="size-5" /> Finish loading
+                        </Button>
+                    </section>
+                )
+            )}
 
             <section className="mx-auto grid max-w-4xl gap-8 rounded-3xl border bg-card p-6 shadow-xs lg:grid-cols-2 lg:items-center">
                 <div className="flex flex-col gap-4">
@@ -442,6 +546,16 @@ export default function LoadingManifest({
                     </div>
                 </div>
             </section>
+
+            <FinishDialog
+                open={finishOpen}
+                onOpenChange={setFinishOpen}
+                trailerName={trailerInfoProp?.name ?? manifest.manifest_number}
+                items={equipmentItems}
+                counts={counts}
+                clash={summary.food_conflicts.length > 0}
+                onFinish={finishLoading}
+            />
 
             <TrailerDialog
                 options={trailerTypes}

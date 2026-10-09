@@ -94,3 +94,16 @@ export type ConsignmentDetail = {
     held_back_by: string | null;
     held_back_at: string | null;
 };
+
+export type TrailerInfo = {
+    id: string;
+    name: string;
+    owner: 'own' | 'contractor';
+    operator_name: string | null;
+};
+
+export type EquipmentItemDef = { key: string; label: string };
+
+export type EquipmentCounts = Record<string, number>;
+
+export type FinishedState = { at: string; by: string | null } | null;

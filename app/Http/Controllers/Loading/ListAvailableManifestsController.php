@@ -31,6 +31,7 @@ class ListAvailableManifestsController extends Controller
                 'destinations',
                 fn ($query) => $query->whereKey($destination->getKey()),
             )
+            ->with('trailer:id,name,owner,operator_name')
             ->withCount('manifestItems')
             ->orderBy('service_date')
             ->orderBy('manifest_number')
