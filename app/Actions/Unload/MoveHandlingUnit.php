@@ -88,7 +88,11 @@ class MoveHandlingUnit
                 'to_location_code' => $direction->location->code,
                 'reason' => $direction->reason,
                 'is_holding' => $direction->isHolding,
-            ];
+            ] + ($direction->suggested === null ? [] : [
+                'override_reason' => 'lane_full',
+                'suggested_location_id' => $direction->suggested->getKey(),
+                'suggested_location_code' => $direction->suggested->code,
+            ]);
             $event->save();
 
             return $locked->setRelation('currentLocation', $direction->location);

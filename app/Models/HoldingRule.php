@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * @property string $sender_name
  * @property int $max_hold_days
+ * @property int $base_lane
  * @property string $reason
  */
 class HoldingRule extends Model
@@ -26,6 +27,7 @@ class HoldingRule extends Model
     {
         return [
             'max_hold_days' => 'integer',
+            'base_lane' => 'integer',
             'is_active' => 'boolean',
         ];
     }

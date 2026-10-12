@@ -3,14 +3,20 @@
 namespace App\Support\Unload;
 
 use App\Models\HandlingUnit;
+use App\Models\Location;
+use Illuminate\Support\Collection;
 
 class DirectionPayload
 {
     /**
+     * @param  Collection<int, Location>|null  $alternatives  other lanes to offer when the suggested one is full
      * @return array<string, mixed>
      */
-    public static function for(HandlingUnit $handlingUnit, BayDirection $direction): array
-    {
+    public static function for(
+        HandlingUnit $handlingUnit,
+        BayDirection $direction,
+        ?Collection $alternatives = null,
+    ): array {
         $consignment = $handlingUnit->consignment;
 
         return [
@@ -30,8 +36,18 @@ class DirectionPayload
                 'name' => $direction->location->name,
                 'is_holding' => $direction->isHolding,
                 'max_hold_days' => $direction->maxHoldDays,
+                'lane' => $direction->lane,
             ],
             'reason' => $direction->reason,
+            'suggested_lane' => $direction->suggested?->lane,
+            'alternatives' => ($alternatives ?? collect())
+                ->map(fn (Location $location): array => [
+                    'location_id' => $location->getKey(),
+                    'code' => $location->code,
+                    'lane' => $location->lane,
+                ])
+                ->values()
+                ->all(),
         ];
     }
 }

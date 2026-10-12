@@ -291,3 +291,206 @@ it('shows the drop-off in the pallet trace', function () {
         ->assertJsonPath('data.pieces.0.events.0.type', 'staged')
         ->assertJsonPath('data.pieces.0.events.0.location_code', 'SYD02');
 });
+
+/**
+ * @return array<int, Location> holding lanes 1 to 5, keyed by lane number
+ */
+function holdingLanes(Depot $home): array
+{
+    $lanes = [];
+
+    foreach (range(1, 5) as $lane) {
+        $lanes[$lane] = Location::factory()->create([
+            'depot_id' => $home->getKey(),
+            'code' => "HOLD{$lane}",
+            'type' => LocationType::HoldingArea,
+            'lane' => $lane,
+        ]);
+    }
+
+    return $lanes;
+}
+
+it('picks the holding lane from the sender and the service level', function (?string $service, int $expectedLane) {
+    $yard = unloadYard();
+    $yard['holding']->delete();
+    holdingLanes($yard['home']);
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware', 'base_lane' => 4]);
+    $pallet = unloadPallet($yard['destination'], 'Harbourline Hardware');
+    $pallet->consignment->forceFill(['service_code' => $service])->save();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.direction'), ['barcode' => $pallet->barcode])
+        ->assertOk()
+        ->assertJsonPath('data.bay.is_holding', true)
+        ->assertJsonPath('data.bay.lane', $expectedLane)
+        ->assertJsonPath('data.bay.code', "HOLD{$expectedLane}");
+})->with([
+    'standard stays on the base lane' => ['STANDARD', 4],
+    'no service stays on the base lane' => [null, 4],
+    'economy goes one lane later' => ['ECONOMY', 5],
+    'express goes two lanes sooner' => ['EXPRESS', 2],
+]);
+
+it('never moves past lane 1 or lane 5', function () {
+    $yard = unloadYard();
+    $yard['holding']->delete();
+    holdingLanes($yard['home']);
+    HoldingRule::factory()->create(['sender_name' => 'Early Sender', 'base_lane' => 1]);
+    HoldingRule::factory()->create(['sender_name' => 'Late Sender', 'base_lane' => 5]);
+
+    $early = unloadPallet($yard['destination'], 'Early Sender');
+    $early->consignment->forceFill(['service_code' => 'EXPRESS'])->save();
+    $late = unloadPallet($yard['destination'], 'Late Sender');
+    $late->consignment->forceFill(['service_code' => 'ECONOMY'])->save();
+
+    $this->actingAs(User::factory()->create());
+    $this->postJson(route('unload.direction'), ['barcode' => $early->barcode])->assertJsonPath('data.bay.lane', 1);
+    $this->postJson(route('unload.direction'), ['barcode' => $late->barcode])->assertJsonPath('data.bay.lane', 5);
+});
+
+it('uses the nearest lane when the target lane is not set up', function () {
+    $yard = unloadYard();
+    $yard['holding']->delete();
+    $lanes = holdingLanes($yard['home']);
+    $lanes[4]->forceFill(['is_active' => false])->save();
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware', 'base_lane' => 4]);
+    $pallet = unloadPallet($yard['destination'], 'Harbourline Hardware');
+
+    // Lanes 3 and 5 are equally close; the lower lane wins the tie.
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.direction'), ['barcode' => $pallet->barcode])
+        ->assertJsonPath('data.bay.lane', 3);
+});
+
+it('simulates an unload scan with an unplaced pallet', function () {
+    $yard = unloadYard();
+    $placed = unloadPallet($yard['destination']);
+    $placed->forceFill(['current_location_id' => $yard['bay']->getKey()])->save();
+    $unplaced = unloadPallet($yard['destination']);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('unload.simulate-scan'))
+        ->assertOk()
+        ->assertJsonPath('data.barcode', $unplaced->barcode);
+});
+
+it('skips loaded pallets when simulating an unload scan', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination']);
+    ManifestItem::factory()->create([
+        'handling_unit_id' => $pallet->getKey(),
+        'manifest_id' => Manifest::factory()->create()->getKey(),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('unload.simulate-scan'))
+        ->assertNotFound()
+        ->assertJsonPath('error.code', 'simulation_pallet_unavailable');
+});
+
+function heldPalletInLaneYard(): array
+{
+    $yard = unloadYard();
+    $yard['holding']->delete();
+    $lanes = holdingLanes($yard['home']);
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware', 'base_lane' => 1]);
+
+    return [$yard, $lanes, unloadPallet($yard['destination'], 'Harbourline Hardware')];
+}
+
+it('offers the other holding lanes when a pallet is held', function () {
+    [, $lanes, $pallet] = heldPalletInLaneYard();
+
+    $response = $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.direction'), ['barcode' => $pallet->barcode])
+        ->assertOk()
+        ->assertJsonPath('data.bay.lane', 1)
+        ->assertJsonCount(5, 'data.alternatives')
+        ->assertJsonPath('data.alternatives.1.location_id', $lanes[2]->getKey())
+        ->assertJsonPath('data.alternatives.1.lane', 2);
+});
+
+it('offers no alternatives for freight going to its destination bay', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination']);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.direction'), ['barcode' => $pallet->barcode])
+        ->assertJsonCount(0, 'data.alternatives');
+});
+
+it('lets the runner place a held pallet in another lane when the suggested one is full', function () {
+    [, $lanes, $pallet] = heldPalletInLaneYard();
+    $runner = User::factory()->create();
+
+    $this->actingAs($runner)
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $lanes[2]))
+        ->assertOk()
+        ->assertJsonPath('data.bay.code', 'HOLD2')
+        ->assertJsonPath('data.bay.lane', 2)
+        ->assertJsonPath('data.suggested_lane', 1);
+
+    expect($pallet->refresh()->current_location_id)->toBe($lanes[2]->getKey())
+        ->and($pallet->current_status)->toBe(HandlingUnitStatus::Held);
+
+    $event = OperationalEvent::query()->sole();
+    expect($event->metadata['to_location_code'])->toBe('HOLD2')
+        ->and($event->metadata['override_reason'])->toBe('lane_full')
+        ->and($event->metadata['suggested_location_code'])->toBe('HOLD1');
+});
+
+it('does not mark a normal drop as an override', function () {
+    [, $lanes, $pallet] = heldPalletInLaneYard();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $lanes[1]))
+        ->assertOk();
+
+    expect(OperationalEvent::query()->sole()->metadata)->not->toHaveKey('override_reason');
+});
+
+it('is idempotent when an overridden drop is retried', function () {
+    [, $lanes, $pallet] = heldPalletInLaneYard();
+    $payload = dropPayload($pallet, $lanes[3]);
+
+    $this->actingAs(User::factory()->create());
+    $this->postJson(route('unload.confirm'), $payload)->assertOk();
+    $this->postJson(route('unload.confirm'), $payload)->assertOk();
+
+    expect(OperationalEvent::query()->count())->toBe(1);
+});
+
+it('rejects an override to an inactive lane', function () {
+    [, $lanes, $pallet] = heldPalletInLaneYard();
+    $lanes[2]->forceFill(['is_active' => false])->save();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $lanes[2]))
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'direction_changed');
+
+    expect($pallet->refresh()->current_location_id)->toBeNull();
+});
+
+it('rejects overriding a held pallet into a destination bay', function () {
+    [$yard, , $pallet] = heldPalletInLaneYard();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $yard['bay']))
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'direction_changed');
+});
+
+it('rejects a lane override for freight that is not held', function () {
+    $yard = unloadYard();
+    $yard['holding']->delete();
+    $lanes = holdingLanes($yard['home']);
+    $pallet = unloadPallet($yard['destination']);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $lanes[2]))
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'direction_changed')
+        ->assertJsonPath('error.details.bay_code', 'SYD02');
+});
