@@ -5,6 +5,10 @@ use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
+use App\Exceptions\Unload\DirectionChanged;
+use App\Exceptions\Unload\HandlingUnitAlreadyLoaded;
+use App\Exceptions\Unload\NoBayForDestination;
+use App\Exceptions\Unload\UnloadEventConflict;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -35,18 +39,21 @@ return Application::configure(basePath: dirname(__DIR__))
         // endpoints behind them speak JSON.
         $isLoadingApi = fn (Request $request): bool => $request->routeIs('loading.*')
             && ! $request->routeIs('loading.index', 'loading.depot', 'loading.manifest');
+        $isUnloadApi = fn (Request $request): bool => $request->routeIs('unload.*')
+            && ! $request->routeIs('unload.index');
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*')
                 || $request->expectsJson()
-                || $isLoadingApi($request),
+                || $isLoadingApi($request)
+                || $isUnloadApi($request),
         );
 
         $exceptions->render(function (
             Throwable $exception,
             Request $request,
-        ) use ($isLoadingApi) {
-            if (! $isLoadingApi($request)) {
+        ) use ($isLoadingApi, $isUnloadApi) {
+            if (! $isLoadingApi($request) && ! $isUnloadApi($request)) {
                 return null;
             }
 
@@ -106,6 +113,36 @@ return Application::configure(basePath: dirname(__DIR__))
                 ],
 
                 $exception instanceof ClientEventConflict => [
+                    'code' => 'client_event_conflict',
+                    'message' => $exception->getMessage(),
+                    'status' => 409,
+                ],
+
+                $exception instanceof NoBayForDestination => [
+                    'code' => 'no_bay_for_destination',
+                    'message' => $exception->getMessage(),
+                    'status' => 422,
+                    'details' => ['destination_code' => $exception->destination->code],
+                ],
+
+                $exception instanceof HandlingUnitAlreadyLoaded => [
+                    'code' => 'handling_unit_already_loaded',
+                    'message' => $exception->getMessage(),
+                    'status' => 409,
+                ],
+
+                $exception instanceof DirectionChanged => [
+                    'code' => 'direction_changed',
+                    'message' => $exception->getMessage(),
+                    'status' => 409,
+                    'details' => [
+                        'bay_code' => $exception->direction->location->code,
+                        'location_id' => $exception->direction->location->getKey(),
+                        'reason' => $exception->direction->reason,
+                    ],
+                ],
+
+                $exception instanceof UnloadEventConflict => [
                     'code' => 'client_event_conflict',
                     'message' => $exception->getMessage(),
                     'status' => 409,

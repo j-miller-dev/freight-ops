@@ -98,6 +98,10 @@ function eventLabel(event: PieceEvent): string {
             return `Scanned into depot${event.location_code ? ` (${event.location_code})` : ''}`;
         case 'staged':
             return `Placed in ${event.location_code ?? 'a location'}`;
+        case 'moved':
+            return event.location_code
+                ? `Moved to ${event.location_code}`
+                : `Moved to ${event.manifest_number ?? 'another trailer'}`;
         case 'loaded':
             return `Loaded on ${event.manifest_number ?? 'a trailer'}`;
         default:

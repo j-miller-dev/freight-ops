@@ -10,6 +10,7 @@ use App\Enums\TrailerType;
 use App\Models\Consignment;
 use App\Models\Depot;
 use App\Models\HandlingUnit;
+use App\Models\HoldingRule;
 use App\Models\Location;
 use App\Models\Manifest;
 use App\Models\ManifestEquipment;
@@ -110,6 +111,14 @@ class SydneyFreightSeeder extends Seeder
             ['depot_id' => $melbourne->getKey(), 'code' => 'HOLD1'],
             ['name' => 'Holding bay 1', 'type' => LocationType::HoldingArea, 'is_active' => true],
         );
+
+        // Big, non-urgent store replenishment can sit in the holding bay for a few days.
+        foreach (['Harbourline Hardware', 'Parkside Building Supplies'] as $sender) {
+            HoldingRule::query()->updateOrCreate(
+                ['sender_name' => $sender],
+                ['max_hold_days' => 3, 'reason' => 'Store replenishment, not urgent', 'is_active' => true],
+            );
+        }
 
         $manifests = $this->manifests($melbourne, $sydney);
 
