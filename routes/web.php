@@ -17,6 +17,9 @@ use App\Http\Controllers\Loading\UpdateConsignmentHoldBackController;
 use App\Http\Controllers\Loading\UpdateManifestItemPositionController;
 use App\Http\Controllers\Loading\UpdateManifestTrailerController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Unload\ConfirmHandlingUnitDropController;
+use App\Http\Controllers\Unload\DirectHandlingUnitController;
+use App\Http\Controllers\Unload\UnloadController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -88,6 +91,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('loading/manifests', ListAvailableManifestsController::class)
         ->name('loading.manifests');
+
+    Route::get('unload', UnloadController::class)->name('unload.index');
+    Route::post('unload/direction', DirectHandlingUnitController::class)->name('unload.direction');
+    Route::post('unload/confirm', ConfirmHandlingUnitDropController::class)->name('unload.confirm');
 });
 
 require __DIR__.'/settings.php';

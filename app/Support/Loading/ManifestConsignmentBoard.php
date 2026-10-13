@@ -185,7 +185,7 @@ class ManifestConsignmentBoard
                         'type' => $event->event_type->value,
                         'occurred_at' => $event->occurred_at->toISOString(),
                         'actor' => $event->actor->name,
-                        'location_code' => $event->metadata['location_code'] ?? null,
+                        'location_code' => $event->metadata['location_code'] ?? $event->metadata['to_location_code'] ?? null,
                         'manifest_number' => $event->metadata['manifest_number'] ?? null,
                     ])
                     ->values()

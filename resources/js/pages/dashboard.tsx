@@ -32,16 +32,21 @@ export default function Dashboard() {
                     </div>
                 </Link>
 
-                <div
-                    aria-disabled="true"
-                    className="flex min-h-48 flex-col justify-between rounded-3xl border border-dashed p-6 text-muted-foreground"
+                <Link
+                    href="/unload"
+                    className="group flex min-h-48 flex-col justify-between rounded-3xl border bg-card p-6 shadow-xs transition-transform active:scale-[0.98]"
                 >
                     <PackageOpen className="size-14" strokeWidth={1.5} />
-                    <div>
-                        <p className="text-3xl font-bold">Unload</p>
-                        <p>Coming soon</p>
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <p className="text-3xl font-bold">Unload</p>
+                            <p className="text-muted-foreground">
+                                Scan a pallet, then take it to its bay
+                            </p>
+                        </div>
+                        <ArrowRight className="size-8 transition-transform group-hover:translate-x-1" />
                     </div>
-                </div>
+                </Link>
             </div>
         </>
     );
