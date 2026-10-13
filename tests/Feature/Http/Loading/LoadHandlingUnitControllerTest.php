@@ -327,3 +327,36 @@ it('counts only this consignment when reporting pallets on the selected manifest
         ->assertJsonPath('error.code', 'consignment_split')
         ->assertJsonPath('error.details.on_selected_after_scan', 2);
 });
+
+it('shows food/DG clash details', function () {
+    $loader = User::factory()->create();
+    $destination = Depot::factory()->create();
+    $manifest = loadingManifest($destination);
+
+    $foodPallet = loadingPallet($destination);
+    $foodPallet->forceFill(['is_food' => true])->save();
+    ManifestItem::factory()->create([
+        'manifest_id' => $manifest->getKey(),
+        'handling_unit_id' => $foodPallet->getKey(),
+    ]);
+
+    $dgConsignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 1,
+    ]);
+    $dgPallet = HandlingUnit::factory()
+        ->for($dgConsignment)
+        ->create(['current_status' => HandlingUnitStatus::Pending, 'dg_class' => '8']);
+
+    $response = $this->actingAs($loader)->postJson(
+        route('loading.scan', $manifest),
+        scanPayload($dgPallet),
+    );
+
+    $response->assertStatus(422)
+        ->assertJsonPath('error.code', 'food_dg_clash')
+        ->assertJsonPath('error.details.is_food', false)
+        ->assertJsonPath('error.details.dg_class', '8')
+        ->assertJsonPath('error.details.conflicting_classes', ['8'])
+        ->assertJsonPath('error.details.manifest_number', $manifest->manifest_number);
+});

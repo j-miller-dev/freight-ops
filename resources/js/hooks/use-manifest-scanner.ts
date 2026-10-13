@@ -24,7 +24,8 @@ export type ScanResult = {
 export type WarningCode =
     | 'destination_mismatch'
     | 'consignment_split'
-    | 'handling_unit_already_assigned';
+    | 'handling_unit_already_assigned'
+    | 'food_dg_clash';
 
 type PendingScan = {
     barcode: string;
@@ -43,6 +44,7 @@ const WARNING_CODES: readonly WarningCode[] = [
     'destination_mismatch',
     'consignment_split',
     'handling_unit_already_assigned',
+    'food_dg_clash',
 ];
 
 function isWarningCode(code: string): code is WarningCode {

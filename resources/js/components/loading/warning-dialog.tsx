@@ -1,4 +1,5 @@
-import { TriangleAlert } from 'lucide-react';
+import { Apple, TriangleAlert } from 'lucide-react';
+import DgDiamond from '@/components/loading/dg-diamond';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -94,6 +95,42 @@ export default function WarningDialog({
                             {String(details.on_selected_after_scan)} of{' '}
                             {String(details.total_count)} pallets will be on
                             this manifest after loading.
+                        </p>
+                    </div>
+                )}
+
+                {warning?.code === 'food_dg_clash' && details && (
+                    <div className="space-y-3 text-sm">
+                        <div className="flex items-center gap-2">
+                            {details.is_food ? (
+                                <Apple className="size-6 text-success" />
+                            ) : (
+                                <DgDiamond
+                                    cls={String(details.dg_class)}
+                                    size={28}
+                                />
+                            )}
+                            <span className="text-muted-foreground">
+                                conflicts with
+                            </span>
+                            {details.is_food ? (
+                                (details.conflicting_classes as string[]).map(
+                                    (cls) => (
+                                        <DgDiamond
+                                            key={cls}
+                                            cls={cls}
+                                            size={28}
+                                        />
+                                    ),
+                                )
+                            ) : (
+                                <Apple className="size-6 text-success" />
+                            )}
+                        </div>
+                        <p className="text-muted-foreground">
+                            Already on {String(details.manifest_number)}.
+                            Dangerous goods and food should not share a trailer
+                            unless cleared by your supervisor.
                         </p>
                     </div>
                 )}

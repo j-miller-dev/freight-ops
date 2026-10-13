@@ -21,7 +21,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\HandlingUnit\>\:\:getKey\(\)\.$#'
 			identifier: method.notFound
-			count: 5
+			count: 6
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
@@ -39,7 +39,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\>\:\:getKey\(\)\.$#'
 			identifier: method.notFound
-			count: 7
+			count: 9
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
@@ -141,6 +141,42 @@ parameters:
 		-
 			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$warning_type \(string\) does not accept App\\Enums\\LoadWarningType\:\:DestinationMismatch\.$#'
 			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$warning_type \(string\) does not accept App\\Enums\\LoadWarningType\:\:FoodDgClash\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Property App\\Models\\WarningAcknowledgement\:\:\$metadata \(string\|null\) does not accept array\<string, bool\|list\<string\>\|string\|null\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\HandlingUnit\>\:\:\$is_food\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\HandlingUnit\>\:\:\$dg_class\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$handlingUnit of class App\\Exceptions\\Loading\\FoodDgClash constructor expects App\\Models\\HandlingUnit, App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\HandlingUnit\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Loading/LoadHandlingUnit.php
+
+		-
+			message: '#^Parameter \$selectedManifest of class App\\Exceptions\\Loading\\FoodDgClash constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\> given\.$#'
+			identifier: argument.type
 			count: 1
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
