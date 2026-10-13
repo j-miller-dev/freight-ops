@@ -22,8 +22,14 @@ class DirectHandlingUnitController extends Controller
             ->with(['consignment', 'currentLocation'])
             ->firstOrFail();
 
+        $direction = $director->direct($handlingUnit);
+
         return response()->json([
-            'data' => DirectionPayload::for($handlingUnit, $director->direct($handlingUnit)),
+            'data' => DirectionPayload::for(
+                $handlingUnit,
+                $direction,
+                $direction->isHolding ? $director->holdingLanes() : null,
+            ),
         ]);
     }
 }

@@ -16,12 +16,23 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class BayDirector
 {
+    private const LANE_COUNT = 5;
+
+    /**
+     * How far a service level moves a pallet toward lane 1 (leaves soonest).
+     * Anything not listed stays on the sender's base lane.
+     *
+     * @var array<string, int>
+     */
+    private const URGENCY_LANE_SHIFT = [
+        'EXPRESS' => -2,
+        'ECONOMY' => 1,
+    ];
+
     public function direct(HandlingUnit $handlingUnit): BayDirection
     {
         $consignment = $handlingUnit->consignment;
-        $homeDepotId = Depot::query()
-            ->where('code', config('freight.home_depot_code'))
-            ->value('id');
+        $homeDepotId = $this->homeDepotId();
 
         $rule = $consignment->sender_name === null
             ? null
@@ -31,7 +42,10 @@ class BayDirector
                 ->first();
 
         if ($rule !== null) {
-            $holding = $this->activeLocations($homeDepotId, LocationType::HoldingArea)->first();
+            $holding = $this->holdingLane(
+                $this->activeLocations($homeDepotId, LocationType::HoldingArea),
+                $this->targetLane($rule, $consignment->service_code),
+            );
 
             // With nowhere to hold it, fall through to the destination bay.
             if ($holding !== null) {
@@ -41,6 +55,7 @@ class BayDirector
                         .($rule->max_hold_days === 1 ? 'day' : 'days').'.',
                     isHolding: true,
                     maxHoldDays: $rule->max_hold_days,
+                    lane: $holding->lane,
                 );
             }
         }
@@ -72,5 +87,73 @@ class BayDirector
             ->where('is_active', true)
             ->orderBy('code')
             ->get();
+    }
+
+    /**
+     * Every lane a runner could use when the suggested one is full.
+     *
+     * @return Collection<int, Location>
+     */
+    public function holdingLanes(): Collection
+    {
+        return $this->activeLocations($this->homeDepotId(), LocationType::HoldingArea)
+            ->sortBy(fn (Location $location): int => $location->lane ?? 0)
+            ->values();
+    }
+
+    /**
+     * The same direction, but placed in another lane because the suggested one
+     * is full. Null when the pallet isn't held or the lane isn't a valid choice.
+     */
+    public function withLaneOverride(BayDirection $direction, string $locationId): ?BayDirection
+    {
+        if (! $direction->isHolding) {
+            return null;
+        }
+
+        $lane = $this->holdingLanes()->firstWhere('id', $locationId);
+
+        if ($lane === null) {
+            return null;
+        }
+
+        return new BayDirection(
+            location: $lane,
+            reason: $direction->reason,
+            isHolding: true,
+            maxHoldDays: $direction->maxHoldDays,
+            lane: $lane->lane,
+            suggested: $direction->location,
+        );
+    }
+
+    private function homeDepotId(): ?string
+    {
+        return Depot::query()
+            ->where('code', config('freight.home_depot_code'))
+            ->value('id');
+    }
+
+    private function targetLane(HoldingRule $rule, ?string $serviceCode): int
+    {
+        $shift = self::URGENCY_LANE_SHIFT[strtoupper((string) $serviceCode)] ?? 0;
+
+        return max(1, min(self::LANE_COUNT, $rule->base_lane + $shift));
+    }
+
+    /**
+     * The lane closest to the target; a holding location with no lane number
+     * counts as an exact match so unnumbered setups still work. Ties go to the
+     * lower lane because the locations arrive ordered by code.
+     *
+     * @param  Collection<int, Location>  $holdingLocations
+     */
+    private function holdingLane(Collection $holdingLocations, int $target): ?Location
+    {
+        return $holdingLocations
+            ->sortBy(fn (Location $location): int => $location->lane === null
+                ? 0
+                : abs($location->lane - $target))
+            ->first();
     }
 }

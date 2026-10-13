@@ -107,16 +107,31 @@ class SydneyFreightSeeder extends Seeder
                 'is_active' => true,
             ],
         );
-        $this->holding = Location::query()->updateOrCreate(
-            ['depot_id' => $melbourne->getKey(), 'code' => 'HOLD1'],
-            ['name' => 'Holding bay 1', 'type' => LocationType::HoldingArea, 'is_active' => true],
-        );
+        // Five holding lanes: 1 leaves soonest, 5 can wait longest.
+        foreach (range(1, 5) as $lane) {
+            $location = Location::query()->updateOrCreate(
+                ['depot_id' => $melbourne->getKey(), 'code' => "HOLD{$lane}"],
+                ['name' => "Holding lane {$lane}", 'type' => LocationType::HoldingArea, 'lane' => $lane, 'is_active' => true],
+            );
 
-        // Big, non-urgent store replenishment can sit in the holding bay for a few days.
-        foreach (['Harbourline Hardware', 'Parkside Building Supplies'] as $sender) {
+            if ($lane === 1) {
+                $this->holding = $location;
+            }
+        }
+
+        // Big, non-urgent store replenishment can sit in a holding lane for a few days.
+        // The base lane is where a standard-service pallet goes; express moves it toward lane 1.
+        $holdingSenders = [
+            'Summit Pool & Garden' => 2,
+            'Parkside Building Supplies' => 3,
+            'Harbourline Hardware' => 4,
+            'Ironbark Timber' => 5,
+        ];
+
+        foreach ($holdingSenders as $sender => $baseLane) {
             HoldingRule::query()->updateOrCreate(
                 ['sender_name' => $sender],
-                ['max_hold_days' => 3, 'reason' => 'Store replenishment, not urgent', 'is_active' => true],
+                ['max_hold_days' => $baseLane >= 4 ? 3 : 2, 'base_lane' => $baseLane, 'reason' => 'Store replenishment, not urgent', 'is_active' => true],
             );
         }
 

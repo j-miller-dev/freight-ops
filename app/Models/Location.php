@@ -36,6 +36,7 @@ class Location extends Model
     {
         return [
             'type' => LocationType::class,
+            'lane' => 'integer',
             'is_active' => 'boolean',
         ];
     }

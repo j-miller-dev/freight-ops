@@ -26,9 +26,11 @@ class ConfirmHandlingUnitDropController extends Controller
 
         $direction = $director->direct($handlingUnit);
 
-        // The rules moved on since the runner scanned: show the new bay first.
         if ($direction->location->getKey() !== $request->validated('location_id')) {
-            throw new DirectionChanged($direction);
+            // A held pallet may go in another lane when the suggested one is full.
+            // Anything else means the rules moved on: show the new bay first.
+            $direction = $director->withLaneOverride($direction, $request->validated('location_id'))
+                ?? throw new DirectionChanged($direction);
         }
 
         $moved = $action->handle(

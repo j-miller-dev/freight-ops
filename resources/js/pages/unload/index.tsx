@@ -14,6 +14,8 @@ import DgDiamond from '@/components/loading/dg-diamond';
 import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import HoldingDialog from '@/components/unload/holding-dialog';
+import WarehouseMapDialog from '@/components/unload/warehouse-map-dialog';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
 import { useUnloadRunner } from '@/hooks/use-unload-runner';
 import { cn } from '@/lib/utils';
@@ -28,7 +30,18 @@ export default function Unload() {
     });
     const inputRef = useRef<HTMLInputElement>(null);
     const [keyboard, setKeyboard] = useState(false);
-    const { direction, stage } = runner;
+    const [acknowledgedId, setAcknowledgedId] = useState<string | null>(null);
+    const [pickingLane, setPickingLane] = useState(false);
+    const { direction, stage, override } = runner;
+    const lane = override?.lane ?? direction?.bay.lane ?? null;
+    const code = override?.code ?? direction?.bay.code;
+    const dropTarget =
+        direction?.bay.is_holding && lane ? `Lane ${lane}` : code;
+    const needsHoldNotice =
+        stage === 'directed' &&
+        direction !== null &&
+        direction.bay.is_holding &&
+        acknowledgedId !== direction.handling_unit_id;
 
     return (
         <>
@@ -38,6 +51,7 @@ export default function Unload() {
                 title="Unload"
                 subtitle="Scan a pallet, then take it to its bay"
                 backHref="/dashboard"
+                actions={<WarehouseMapDialog />}
             />
 
             {stage === 'idle' && (
@@ -140,6 +154,19 @@ export default function Unload() {
 
                     {camera.error && <AlertError errors={[camera.error]} />}
                     {runner.error && <AlertError errors={[runner.error]} />}
+
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-muted-foreground"
+                        onClick={() => void runner.simulate()}
+                        disabled={runner.busy || runner.simulating}
+                    >
+                        {runner.simulating
+                            ? 'Simulating…'
+                            : 'Simulate seeded scan'}
+                    </Button>
                 </section>
             )}
 
@@ -161,14 +188,81 @@ export default function Unload() {
                                     : 'text-primary',
                             )}
                         >
-                            {direction.bay.code}
+                            {code}
                         </p>
                         <p className="text-lg text-muted-foreground">
-                            {direction.bay.name}
+                            {lane ? `Lane ${lane}` : direction.bay.name}
                         </p>
+                        {override && direction.bay.lane && (
+                            <p className="text-sm text-muted-foreground">
+                                Lane {direction.bay.lane} was full
+                            </p>
+                        )}
                     </div>
 
                     <p className="text-lg font-medium">{direction.reason}</p>
+
+                    {direction.bay.is_holding &&
+                        direction.alternatives.length > 1 && (
+                            <div className="space-y-3">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setPickingLane((v) => !v)}
+                                    disabled={runner.busy}
+                                >
+                                    {pickingLane
+                                        ? 'Hide lanes'
+                                        : `Lane ${direction.bay.lane ?? ''} full? Use another lane`}
+                                </Button>
+
+                                {pickingLane && (
+                                    <div
+                                        className="grid grid-cols-5 gap-2"
+                                        role="group"
+                                        aria-label="Holding lanes"
+                                    >
+                                        {direction.alternatives.map(
+                                            (option) => {
+                                                const chosen =
+                                                    (override?.location_id ??
+                                                        direction.bay
+                                                            .location_id) ===
+                                                    option.location_id;
+
+                                                return (
+                                                    <Button
+                                                        key={option.location_id}
+                                                        type="button"
+                                                        size="lg"
+                                                        variant={
+                                                            chosen
+                                                                ? 'default'
+                                                                : 'outline'
+                                                        }
+                                                        aria-pressed={chosen}
+                                                        disabled={runner.busy}
+                                                        onClick={() =>
+                                                            runner.chooseLane(
+                                                                option.location_id ===
+                                                                    direction
+                                                                        .bay
+                                                                        .location_id
+                                                                    ? null
+                                                                    : option,
+                                                            )
+                                                        }
+                                                    >
+                                                        {option.lane ??
+                                                            option.code}
+                                                    </Button>
+                                                );
+                                            },
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                     <div className="space-y-1 border-t pt-4">
                         <p className="text-lg font-medium">
@@ -209,7 +303,10 @@ export default function Unload() {
                             type="button"
                             variant="outline"
                             size="xl"
-                            onClick={runner.reset}
+                            onClick={() => {
+                                setPickingLane(false);
+                                runner.reset();
+                            }}
                             disabled={runner.busy}
                         >
                             Cancel
@@ -217,16 +314,32 @@ export default function Unload() {
                         <Button
                             type="button"
                             size="xl"
-                            className="flex-1"
+                            className="h-24 flex-1 flex-col gap-0"
                             onClick={() => void runner.confirm()}
-                            disabled={runner.busy}
+                            disabled={runner.busy || needsHoldNotice}
+                            aria-label={`Tap when dropped off in ${dropTarget}`}
                         >
-                            <PackageCheck />
-                            {runner.busy ? 'Saving…' : 'Confirm dropped off'}
+                            <span className="flex items-center gap-2 text-sm font-medium opacity-90">
+                                <PackageCheck className="size-4" />
+                                {runner.busy
+                                    ? 'Saving…'
+                                    : 'Tap when dropped in'}
+                            </span>
+                            <span className="text-4xl font-black tracking-wide">
+                                {dropTarget}
+                            </span>
                         </Button>
                     </div>
                 </section>
             )}
+
+            <HoldingDialog
+                direction={needsHoldNotice ? direction : null}
+                onAcknowledge={() =>
+                    setAcknowledgedId(direction?.handling_unit_id ?? null)
+                }
+                onCancel={runner.reset}
+            />
 
             {stage === 'dropped' && direction && (
                 <section
@@ -239,7 +352,8 @@ export default function Unload() {
                     </div>
                     <div className="space-y-1">
                         <p className="text-2xl font-bold text-success">
-                            Dropped in {direction.bay.code}
+                            Dropped in {code}
+                            {lane ? ` (lane ${lane})` : ''}
                         </p>
                         <p className="text-lg text-muted-foreground">
                             {direction.connote_number} · piece{' '}
@@ -250,7 +364,10 @@ export default function Unload() {
                         type="button"
                         size="xl"
                         className="w-full"
-                        onClick={runner.reset}
+                        onClick={() => {
+                            setPickingLane(false);
+                            runner.reset();
+                        }}
                     >
                         Scan next pallet
                     </Button>

@@ -20,6 +20,7 @@ class HoldingRuleFactory extends Factory
         return [
             'sender_name' => fake()->unique()->company(),
             'max_hold_days' => 3,
+            'base_lane' => 3,
             'reason' => 'Stock replenishment, not urgent',
             'is_active' => true,
         ];

@@ -1,5 +1,11 @@
 import { useRef, useState } from 'react';
-import { HttpError, postJson } from '@/lib/http';
+import { getJson, HttpError, postJson } from '@/lib/http';
+
+export type LaneOption = {
+    location_id: string;
+    code: string;
+    lane: number | null;
+};
 
 export type BayDirection = {
     handling_unit_id: string;
@@ -18,8 +24,11 @@ export type BayDirection = {
         name: string;
         is_holding: boolean;
         max_hold_days: number | null;
+        lane: number | null;
     };
     reason: string;
+    suggested_lane: number | null;
+    alternatives: LaneOption[];
 };
 
 type Stage = 'idle' | 'directed' | 'dropped';
@@ -31,6 +40,9 @@ export function useUnloadRunner() {
     const [stage, setStage] = useState<Stage>('idle');
     const [direction, setDirection] = useState<BayDirection | null>(null);
     const [busy, setBusy] = useState(false);
+    const [simulating, setSimulating] = useState(false);
+    // Set when the suggested lane is full and the runner picks another.
+    const [override, setOverride] = useState<LaneOption | null>(null);
     const [error, setError] = useState('');
     // One event id per drop-off attempt, so tapping Confirm again after a
     // dropped connection can never record the move twice.
@@ -56,6 +68,7 @@ export function useUnloadRunner() {
             );
 
             pendingRef.current = null;
+            setOverride(null);
             setDirection(data);
             setStage('directed');
         } catch (lookupError) {
@@ -69,6 +82,23 @@ export function useUnloadRunner() {
         } finally {
             busyRef.current = false;
             setBusy(false);
+        }
+    }
+
+    async function simulate() {
+        setSimulating(true);
+        setError('');
+
+        try {
+            const { data } = await getJson<{ data: { barcode: string } }>(
+                '/unload/simulate-scan',
+            );
+
+            await lookup(data.barcode);
+        } catch (simulationError) {
+            setError((simulationError as Error).message);
+        } finally {
+            setSimulating(false);
         }
     }
 
@@ -89,7 +119,7 @@ export function useUnloadRunner() {
         try {
             await postJson('/unload/confirm', {
                 barcode: direction.barcode,
-                location_id: direction.bay.location_id,
+                location_id: override?.location_id ?? direction.bay.location_id,
                 client_event_id: pendingRef.current.clientEventId,
                 occurred_at: pendingRef.current.occurredAt,
             });
@@ -124,6 +154,7 @@ export function useUnloadRunner() {
 
     function reset() {
         pendingRef.current = null;
+        setOverride(null);
         setBarcode('');
         setDirection(null);
         setStage('idle');
@@ -135,9 +166,13 @@ export function useUnloadRunner() {
         setBarcode,
         stage,
         direction,
+        override,
+        chooseLane: setOverride,
         busy,
+        simulating,
         error,
         lookup,
+        simulate,
         confirm,
         reset,
     };
