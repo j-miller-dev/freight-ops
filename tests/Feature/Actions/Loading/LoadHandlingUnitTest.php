@@ -7,6 +7,7 @@ use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
+use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
 use App\Models\Consignment;
@@ -671,4 +672,171 @@ it('records an operations event when a pallet is loaded', function () {
         ->and($event->metadata['manifest_number'])->toBe($manifest->manifest_number)
         ->and($event->occurred_at->toDateTimeString())
         ->toBe($occurredAt->toDateTimeString());
+});
+
+it('reports a food/DG clash when a DG pallet would join food already on the trailer', function () {
+    $destination = Depot::factory()->create();
+    $manifest = Manifest::factory()->create(['status' => 'open']);
+    $manifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 2,
+    ]);
+    $loader = User::factory()->create();
+    $action = app(LoadHandlingUnit::class);
+
+    $foodPallet = HandlingUnit::factory()->for($consignment)->create(['is_food' => true]);
+    $action->handle(
+        manifest: $manifest,
+        handlingUnit: $foodPallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinute(),
+    );
+
+    $dgPallet = HandlingUnit::factory()->for($consignment)->create(['dg_class' => '8']);
+    $caughtException = null;
+
+    try {
+        $action->handle(
+            manifest: $manifest,
+            handlingUnit: $dgPallet,
+            loader: $loader,
+            clientEventId: (string) Str::uuid(),
+            occurredAt: now(),
+        );
+    } catch (FoodDgClash $exception) {
+        $caughtException = $exception;
+    }
+
+    expect($caughtException)->not->toBeNull()
+        ->and($caughtException->handlingUnit->is($dgPallet))->toBeTrue()
+        ->and($caughtException->selectedManifest->is($manifest))->toBeTrue()
+        ->and($caughtException->conflictingClasses)->toBe(['8'])
+        ->and(ManifestItem::query()->where('handling_unit_id', $dgPallet->getKey())->exists())->toBeFalse();
+});
+
+it('reports a food/DG clash when a food pallet would join an incompatible DG class already on the trailer', function () {
+    $destination = Depot::factory()->create();
+    $manifest = Manifest::factory()->create(['status' => 'open']);
+    $manifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 2,
+    ]);
+    $loader = User::factory()->create();
+    $action = app(LoadHandlingUnit::class);
+
+    $dgPallet = HandlingUnit::factory()->for($consignment)->create(['dg_class' => '6.1']);
+    $action->handle(
+        manifest: $manifest,
+        handlingUnit: $dgPallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinute(),
+    );
+
+    $foodPallet = HandlingUnit::factory()->for($consignment)->create(['is_food' => true]);
+    $caughtException = null;
+
+    try {
+        $action->handle(
+            manifest: $manifest,
+            handlingUnit: $foodPallet,
+            loader: $loader,
+            clientEventId: (string) Str::uuid(),
+            occurredAt: now(),
+        );
+    } catch (FoodDgClash $exception) {
+        $caughtException = $exception;
+    }
+
+    expect($caughtException)->not->toBeNull()
+        ->and($caughtException->handlingUnit->is($foodPallet))->toBeTrue()
+        ->and($caughtException->conflictingClasses)->toBe(['6.1']);
+});
+
+it('does not warn for a DG class that does not conflict with food', function () {
+    $destination = Depot::factory()->create();
+    $manifest = Manifest::factory()->create(['status' => 'open']);
+    $manifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 2,
+    ]);
+    $loader = User::factory()->create();
+    $action = app(LoadHandlingUnit::class);
+
+    $foodPallet = HandlingUnit::factory()->for($consignment)->create(['is_food' => true]);
+    $action->handle(
+        manifest: $manifest,
+        handlingUnit: $foodPallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinute(),
+    );
+
+    // Class 3 (flammable liquid) is not in DgSegregationChecker::FOOD_INCOMPATIBLE_CLASSES.
+    $dgPallet = HandlingUnit::factory()->for($consignment)->create(['dg_class' => '3']);
+
+    $manifestItem = $action->handle(
+        manifest: $manifest,
+        handlingUnit: $dgPallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now(),
+    );
+
+    expect($manifestItem->handlingUnit->is($dgPallet))->toBeTrue();
+});
+
+it('loads a food/DG-clashing pallet when the warning is acknowledged', function () {
+    $destination = Depot::factory()->create();
+    $manifest = Manifest::factory()->create(['status' => 'open']);
+    $manifest->destinations()->attach($destination, ['is_primary' => true]);
+
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $destination->getKey(),
+        'item_count' => 2,
+    ]);
+    $loader = User::factory()->create();
+    $action = app(LoadHandlingUnit::class);
+
+    $foodPallet = HandlingUnit::factory()->for($consignment)->create(['is_food' => true]);
+    $action->handle(
+        manifest: $manifest,
+        handlingUnit: $foodPallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now()->subMinute(),
+    );
+
+    $dgPallet = HandlingUnit::factory()->for($consignment)->create(['dg_class' => '8']);
+
+    $manifestItem = $action->handle(
+        manifest: $manifest,
+        handlingUnit: $dgPallet,
+        loader: $loader,
+        clientEventId: (string) Str::uuid(),
+        occurredAt: now(),
+        acknowledgedWarnings: [
+            LoadWarningType::FoodDgClash,
+        ],
+    );
+
+    $acknowledgement = WarningAcknowledgement::query()
+        ->where('warning_type', LoadWarningType::FoodDgClash)
+        ->sole();
+
+    expect($manifestItem->handlingUnit->is($dgPallet))->toBeTrue()
+        ->and($dgPallet->fresh()->current_status)->toBe(HandlingUnitStatus::Loaded)
+        ->and($acknowledgement->handlingUnit->is($dgPallet))->toBeTrue()
+        ->and($acknowledgement->manifest->is($manifest))->toBeTrue()
+        ->and($acknowledgement->acknowledgedBy->is($loader))->toBeTrue()
+        ->and($acknowledgement->metadata['is_food'])->toBeFalse()
+        ->and($acknowledgement->metadata['dg_class'])->toBe('8')
+        ->and($acknowledgement->metadata['conflicting_classes'])->toBe(['8']);
 });
