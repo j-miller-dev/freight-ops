@@ -2,12 +2,14 @@
 
 namespace App\Actions\Loading;
 
+use App\Calculators\DgSegregationChecker;
 use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
+use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
 use App\Models\Depot;
@@ -22,6 +24,8 @@ use Illuminate\Support\Facades\DB;
 
 class LoadHandlingUnit
 {
+    public function __construct(private readonly DgSegregationChecker $dgChecker) {}
+
     public function handle(
         Manifest $manifest,
         HandlingUnit $handlingUnit,
@@ -177,6 +181,38 @@ class LoadHandlingUnit
                 );
             }
 
+            $onThisTrailer = HandlingUnit::query()
+                ->join('manifest_items', 'manifest_items.handling_unit_id', '=', 'handling_units.id')
+                ->where('manifest_items.manifest_id', $lockedManifest->getKey());
+
+            $existingDgClasses = (clone $onThisTrailer)
+                ->whereNotNull('handling_units.dg_class')
+                ->distinct()
+                ->pluck('handling_units.dg_class')
+                ->all();
+
+            $existingHasFood = (clone $onThisTrailer)
+                ->where('handling_units.is_food', true)
+                ->exists();
+
+            $foodDgConflicts = $lockedHandlingUnit->is_food
+                ? $this->dgChecker->foodConflicts($existingDgClasses, true)
+                : $this->dgChecker->foodConflicts([$lockedHandlingUnit->dg_class], $existingHasFood);
+
+            $foodDgClashAcknowledged = in_array(
+                LoadWarningType::FoodDgClash,
+                $acknowledgedWarnings,
+                true,
+            );
+
+            if ($foodDgConflicts !== [] && ! $foodDgClashAcknowledged) {
+                throw new FoodDgClash(
+                    handlingUnit: $lockedHandlingUnit,
+                    selectedManifest: $lockedManifest,
+                    conflictingClasses: $foodDgConflicts,
+                );
+            }
+
             $selectedManifestPalletCount = $lockedManifest->manifestItems()->count();
 
             $manifestItem = new ManifestItem;
@@ -213,6 +249,22 @@ class LoadHandlingUnit
                         ])
                         ->values()
                         ->all(),
+                ];
+                $acknowledgement->save();
+            }
+
+            if ($foodDgConflicts !== []) {
+                $acknowledgement = new WarningAcknowledgement;
+                $acknowledgement->warning_type = LoadWarningType::FoodDgClash;
+                $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
+                $acknowledgement->manifest_id = $lockedManifest->getKey();
+                $acknowledgement->acknowledged_by = $loader->getKey();
+                $acknowledgement->client_event_id = $clientEventId;
+                $acknowledgement->acknowledged_at = $occurredAt;
+                $acknowledgement->metadata = [
+                    'is_food' => $lockedHandlingUnit->is_food,
+                    'dg_class' => $lockedHandlingUnit->dg_class,
+                    'conflicting_classes' => $foodDgConflicts,
                 ];
                 $acknowledgement->save();
             }
