@@ -3,6 +3,7 @@
 use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
+use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
 use App\Http\Middleware\HandleAppearance;
@@ -109,6 +110,18 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'client_event_conflict',
                     'message' => $exception->getMessage(),
                     'status' => 409,
+                ],
+
+                $exception instanceof FoodDgClash => [
+                    'code' => 'food_dg_clash',
+                    'message' => $exception->getMessage(),
+                    'status' => 422,
+                    'details' => [
+                        'is_food' => $exception->handlingUnit->is_food,
+                        'dg_class' => $exception->handlingUnit->dg_class,
+                        'conflicting_classes' => $exception->conflictingClasses,
+                        'manifest_number' => $exception->selectedManifest->manifest_number,
+                    ],
                 ],
 
                 default => null,
