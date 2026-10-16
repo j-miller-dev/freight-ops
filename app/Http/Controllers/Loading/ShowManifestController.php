@@ -9,6 +9,7 @@ use App\Support\Loading\ManifestConsignmentBoard;
 use App\Support\Loading\ManifestEquipmentCounts;
 use App\Support\Loading\ManifestSummary;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,7 +22,7 @@ class ShowManifestController extends Controller
         ManifestConsignmentBoard $board,
         ManifestEquipmentCounts $equipment,
     ): Response {
-        $manifest->loadCount('manifestItems')->load('trailer', 'finishedBy');
+        $manifest->loadCount('manifestItems')->load('trailer', 'finishedBy', 'closedBy');
 
         $destination = $manifest->destinations()
             ->orderByDesc('manifest_destinations.is_primary')
@@ -42,6 +43,11 @@ class ShowManifestController extends Controller
                 'at' => $manifest->loading_finished_at->toISOString(),
                 'by' => $manifest->finishedBy?->name,
             ],
+            'closed' => $manifest->status === 'open' ? null : [
+                'at' => $manifest->closed_at?->toISOString(),
+                'by' => $manifest->closedBy?->name,
+            ],
+            'can_close' => Gate::allows('close', $manifest),
             'equipment' => $equipment->for($manifest),
             'equipment_items' => ManifestEquipmentCounts::items(),
             'summary' => $summary->for($manifest),
