@@ -59,7 +59,14 @@ it('warns with details instead of closing when consignments are outstanding', fu
         'status' => 'open',
         'loading_finished_at' => now(),
     ]);
-    Consignment::factory()->create(['item_count' => 1]);
+    // Only 1 of 2 pallets for this consignment are on the trailer.
+    $consignment = Consignment::factory()->create(['item_count' => 2]);
+    $loaded = HandlingUnit::factory()->for($consignment)->create(['piece_number' => 1]);
+    HandlingUnit::factory()->for($consignment)->create(['piece_number' => 2]);
+    ManifestItem::factory()->create([
+        'manifest_id' => $manifest->getKey(),
+        'handling_unit_id' => $loaded->getKey(),
+    ]);
 
     $this->actingAs(User::factory()->scaler()->create())
         ->postJson(route('loading.manifest.close', $manifest))

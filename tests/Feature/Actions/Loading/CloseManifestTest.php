@@ -25,6 +25,20 @@ function loadOnePalletConsignment(Manifest $manifest): Consignment
     return $consignment;
 }
 
+/** A two-pallet consignment with only the first piece loaded on this manifest. */
+function loadPartialConsignment(Manifest $manifest): Consignment
+{
+    $consignment = Consignment::factory()->create(['item_count' => 2]);
+    $loaded = HandlingUnit::factory()->for($consignment)->create(['piece_number' => 1]);
+    HandlingUnit::factory()->for($consignment)->create(['piece_number' => 2]);
+    ManifestItem::factory()->create([
+        'manifest_id' => $manifest->getKey(),
+        'handling_unit_id' => $loaded->getKey(),
+    ]);
+
+    return $consignment;
+}
+
 it('closes a fully reconciled, finished manifest without needing acknowledgement', function () {
     $manifest = Manifest::factory()->create([
         'status' => 'open',
@@ -51,8 +65,8 @@ it('refuses to close with outstanding consignments unless acknowledged', functio
         'status' => 'open',
         'loading_finished_at' => now(),
     ]);
-    // Only 0 of 1 pallets on the trailer for this consignment.
-    Consignment::factory()->create(['item_count' => 1]);
+    // Only 1 of 2 pallets for this consignment are on the trailer.
+    loadPartialConsignment($manifest);
 
     $scaler = User::factory()->scaler()->create();
 
