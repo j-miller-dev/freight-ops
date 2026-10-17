@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import AlertError from '@/components/alert-error';
+import CloseManifestDialog from '@/components/loading/close-manifest-dialog';
 import ConsignmentSheet from '@/components/loading/consignment-sheet';
 import DepartureBadge from '@/components/loading/departure-badge';
 import FinishDialog from '@/components/loading/finish-dialog';
@@ -33,6 +34,7 @@ import { useManifestSummary } from '@/hooks/use-manifest-summary';
 import { deleteJson, patchJson, postJson } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type {
+    ClosedState,
     DgItem,
     EquipmentCounts,
     EquipmentItemDef,
@@ -60,6 +62,8 @@ type Props = {
     trailer_types: TrailerTypeOption[];
     trailer: TrailerInfo | null;
     finished: FinishedState;
+    closed: ClosedState;
+    can_close: boolean;
     equipment: EquipmentCounts;
     equipment_items: EquipmentItemDef[];
 };
@@ -71,6 +75,8 @@ export default function LoadingManifest({
     trailer_types: trailerTypes,
     trailer: trailerInfoProp,
     finished: initialFinished,
+    closed: initialClosed,
+    can_close: canClose,
     equipment: initialEquipment,
     equipment_items: equipmentItems,
 }: Props) {
@@ -136,10 +142,13 @@ export default function LoadingManifest({
     );
     const [finished, setFinished] = useState(initialFinished);
     const [finishOpen, setFinishOpen] = useState(false);
+    const [status, setStatus] = useState(manifest.status);
+    const [closedState, setClosedState] = useState(initialClosed);
+    const [closeOpen, setCloseOpen] = useState(false);
 
     // A manifest the scaler closed, or one the loader has signed off, takes no
     // more scans (reopen to carry on).
-    const closed = manifest.status !== 'open' || finished !== null;
+    const closed = status !== 'open' || finished !== null;
     const { outbox } = scanner;
     const busy = scanner.scanning || scanner.simulating;
     const progress = scanner.result?.progress;
@@ -222,6 +231,33 @@ export default function LoadingManifest({
         }
     }
 
+    async function closeManifest(): Promise<boolean> {
+        try {
+            const json = await postJson<{
+                data: {
+                    status: string;
+                    closed_at: string;
+                    closed_by: string | null;
+                };
+            }>(`/loading/manifests/${manifest.id}/close`, {
+                acknowledged: true,
+            });
+
+            setStatus(json.data.status);
+            setClosedState({
+                at: json.data.closed_at,
+                by: json.data.closed_by,
+            });
+            toast.success('Manifest closed.');
+
+            return true;
+        } catch (error) {
+            toast.error((error as Error).message);
+
+            return false;
+        }
+    }
+
     function handleMapOpenChange(open: boolean) {
         setMapOpen(open);
 
@@ -251,6 +287,18 @@ export default function LoadingManifest({
                         ? `/loading/depots/${destination.id}`
                         : '/loading'
                 }
+                actions={
+                    canClose &&
+                    status === 'open' && (
+                        <Button
+                            variant="outline"
+                            className="h-11 rounded-xl"
+                            onClick={() => setCloseOpen(true)}
+                        >
+                            Close manifest
+                        </Button>
+                    )
+                }
             />
 
             <div className="mb-4 space-y-2 empty:hidden">
@@ -272,9 +320,14 @@ export default function LoadingManifest({
                         Some scans could not be delivered. Tell a supervisor.
                     </p>
                 )}
-                {manifest.status !== 'open' && (
+                {status !== 'open' && (
                     <p className="rounded-xl bg-muted px-4 py-3 font-medium">
-                        This manifest is closed. Scanning is disabled.
+                        This manifest is closed
+                        {closedState?.by ? ` by ${closedState.by}` : ''}
+                        {closedState?.at
+                            ? ` at ${new Date(closedState.at).toLocaleString([], { hour: 'numeric', minute: '2-digit' })}`
+                            : ''}
+                        . Scanning is disabled.
                     </p>
                 )}
             </div>
@@ -365,7 +418,7 @@ export default function LoadingManifest({
                     </Button>
                 </section>
             ) : (
-                manifest.status === 'open' && (
+                status === 'open' && (
                     <section className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
                         <Stepper
                             label="Red pallets"
@@ -588,6 +641,16 @@ export default function LoadingManifest({
                 busy={scanner.scanning}
                 onConfirm={scanner.confirmWarning}
                 onCancel={scanner.dismissWarning}
+            />
+
+            <CloseManifestDialog
+                open={closeOpen}
+                onOpenChange={setCloseOpen}
+                manifestNumber={manifest.manifest_number}
+                consignmentsTotal={summary.consignments_total}
+                consignmentsComplete={summary.consignments_complete}
+                loadingFinished={finished !== null}
+                onClose={closeManifest}
             />
         </>
     );

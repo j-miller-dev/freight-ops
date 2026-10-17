@@ -55,6 +55,14 @@ class Manifest extends Model
     }
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function closedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    /**
      * @return HasMany<ManifestEquipment, $this>
      */
     public function equipment(): HasMany
@@ -100,6 +108,7 @@ class Manifest extends Model
             'source_updated_at' => 'datetime',
             'last_synced_at' => 'datetime',
             'closed_at' => 'datetime',
+            'close_summary' => 'array',
         ];
     }
 }

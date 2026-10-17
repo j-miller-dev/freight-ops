@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\PinLoginController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Loading\AdjustManifestEquipmentController;
+use App\Http\Controllers\Loading\CloseManifestController;
 use App\Http\Controllers\Loading\FinishManifestLoadingController;
 use App\Http\Controllers\Loading\ListAvailableManifestsController;
 use App\Http\Controllers\Loading\ListManifestConsignmentsController;
@@ -65,6 +66,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::delete('loading/manifests/{manifest}/finish', [FinishManifestLoadingController::class, 'destroy'])
         ->name('loading.manifest.reopen');
+
+    Route::post('loading/manifests/{manifest}/close', CloseManifestController::class)
+        ->name('loading.manifest.close');
 
     Route::get('loading/manifests/{manifest}/summary', ManifestSummaryController::class)
         ->name('loading.manifest.summary');

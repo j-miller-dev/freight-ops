@@ -38,9 +38,9 @@ must not copy proprietary code, credentials, or operational data.
 7. A short confirmation appears and dismisses automatically after a few
    seconds. An OK button permits immediate dismissal.
 8. Several loaders may scan onto the same manifest concurrently.
-9. A scaler closes and dispatches the finished manifest in the upstream depot
-   system. Dangerous-goods paperwork and final dispatch reconciliation are
-   outside the first Freight Ops slice.
+9. A scaler reconciles and closes the manifest. In the real depot this also
+   dispatches it in the upstream system; see "Manifest close (v2)" below for
+   how Freight Ops now models its own side of that decision.
 
 ## Slice 1 acceptance statement
 
@@ -115,6 +115,32 @@ without asking for a split reason. A split is valid and should not be blocked.
 - Server-side uniqueness and idempotency protect concurrent loading by multiple
   operators.
 
+## Manifest close (v2)
+
+Slice 1 deferred manifest closing entirely to the upstream system: Freight Ops
+only mirrored whatever status a sync reported. That boundary undersold the
+app as a portfolio piece — "open and load, but never close" reads as an
+unfinished core loop rather than a deliberate scope cut, and closing is the
+one supervisor-facing decision in the real workflow most worth demonstrating.
+
+Freight Ops v2 takes local ownership of this one decision:
+
+- A scaler (or supervisor/admin) closes a manifest from within Freight Ops
+  itself — `CloseManifest`, gated by `ManifestPolicy::close`. This sets
+  `status`/`closed_at`/`closed_by` locally; it does not call any real
+  upstream system, fictional or otherwise.
+- Outstanding consignments or an unfinished loader sign-off warn but do not
+  block closing — consistent with every other warning in this document, the
+  override is recorded (`close_summary.closed_with_warnings`) rather than
+  forced to resolve first.
+- `SyncManifests` will not silently reopen a manifest that was closed
+  locally just because an upstream sync still reports it open; a sync that
+  itself reports `closed` still wins (it is the authoritative source once it
+  catches up).
+- Dangerous-goods paperwork and any real dispatch-system integration remain
+  out of scope. This is a local reconciliation/close decision, not a claim
+  that Freight Ops replaces or talks to a real depot system.
+
 ## Manifest synchronization boundary
 
 The upstream integration mechanism is not yet known. Freight Ops must isolate it
@@ -159,8 +185,8 @@ the loading workflow works.
 ## Deferred capabilities
 
 - Real upstream DepotApp connector, pending an approved integration mechanism
-- Manifest closing, dispatch, and paperwork workflows
-- Dangerous-goods document processing
+- Dispatch-system integration and dangerous-goods paperwork (manifest closing
+  itself is no longer deferred — see "Manifest close (v2)")
 - Registration automation or trailer barcodes
 - Weight, cube, and trailer-capacity calculations
 - Split-avoidance recommendations and reporting

@@ -20,6 +20,18 @@ class SyncManifests
     {
         $depot = Depot::query()->where('code', $data->depotCode)->firstOrFail();
 
+        $existing = Manifest::query()
+            ->where('source', $sourceName)
+            ->where('external_id', $data->externalId)
+            ->first();
+
+        // A manifest closed locally in Freight Ops (see CloseManifest) stays
+        // closed even if the upstream source hasn't caught up yet; it should
+        // never silently reopen on the next sync.
+        $lockedClosedLocally = $existing !== null
+            && $existing->closed_by !== null
+            && $data->status !== 'closed';
+
         $manifest = Manifest::query()->updateOrCreate(
             ['source' => $sourceName, 'external_id' => $data->externalId],
             [
@@ -27,8 +39,10 @@ class SyncManifests
                 'manifest_number' => $data->manifestNumber,
                 'service_date' => $data->serviceDate,
                 'departs_at' => $data->departsAt,
-                'status' => $data->status,
-                'closed_at' => $data->status === 'closed' ? $data->sourceUpdatedAt : null,
+                ...($lockedClosedLocally ? [] : [
+                    'status' => $data->status,
+                    'closed_at' => $data->status === 'closed' ? $data->sourceUpdatedAt : null,
+                ]),
                 'trailer_label' => $data->trailerLabel,
                 'trailer_registration' => $data->trailerRegistration,
                 'source_updated_at' => $data->sourceUpdatedAt,

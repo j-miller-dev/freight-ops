@@ -107,3 +107,5 @@ export type EquipmentItemDef = { key: string; label: string };
 export type EquipmentCounts = Record<string, number>;
 
 export type FinishedState = { at: string; by: string | null } | null;
+
+export type ClosedState = { at: string | null; by: string | null } | null;

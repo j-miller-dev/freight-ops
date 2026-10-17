@@ -6,6 +6,7 @@ use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
+use App\Exceptions\Loading\ManifestNotReadyToClose;
 use App\Exceptions\Unload\DirectionChanged;
 use App\Exceptions\Unload\HandlingUnitAlreadyLoaded;
 use App\Exceptions\Unload\NoBayForDestination;
@@ -63,6 +64,17 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'manifest_not_open',
                     'message' => $exception->getMessage(),
                     'status' => 409,
+                ],
+
+                $exception instanceof ManifestNotReadyToClose => [
+                    'code' => 'manifest_not_ready_to_close',
+                    'message' => $exception->getMessage(),
+                    'status' => 422,
+                    'details' => [
+                        'consignments_total' => $exception->consignmentsTotal,
+                        'consignments_complete' => $exception->consignmentsComplete,
+                        'loading_finished' => $exception->loadingFinished,
+                    ],
                 ],
 
                 $exception instanceof DestinationMismatch => [
