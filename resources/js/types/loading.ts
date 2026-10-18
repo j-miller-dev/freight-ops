@@ -34,7 +34,8 @@ export type ManifestSummary = {
     food_conflicts: string[];
 };
 
-export type ConsignmentState = 'complete' | 'ready' | 'not_ready' | 'elsewhere';
+export type ConsignmentState =
+    'complete' | 'ready' | 'not_ready' | 'held' | 'elsewhere';
 
 export type ConsignmentRow = {
     id: string;
@@ -45,7 +46,13 @@ export type ConsignmentRow = {
     item_count: number;
     on_trailer: number;
     on_other_trailers: number;
+    // Some pieces are on another manifest; those manifests' numbers.
+    split: boolean;
+    split_manifests: string[];
     in_bay: number;
+    // Waiting in a holding lane on purpose, and which lanes.
+    held: number;
+    held_lanes: string[];
     not_in_bay: number;
     bay_code: string | null;
     state: ConsignmentState;
@@ -58,6 +65,7 @@ export type PieceState =
     | 'this_trailer'
     | 'other_trailer'
     | 'in_bay'
+    | 'held'
     | 'elsewhere'
     | 'not_scanned_in';
 

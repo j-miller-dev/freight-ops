@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ManifestConsignmentBoard
 {
-    public const FILTERS = ['all', 'ready', 'not_ready', 'complete'];
+    public const FILTERS = ['all', 'ready', 'not_ready', 'complete', 'split'];
 
     /** The bay at this depot that collects freight for the manifest's destination. */
     public function bayFor(Manifest $manifest): ?Location
@@ -52,11 +52,17 @@ class ManifestConsignmentBoard
         $inBay = fn (Builder $query) => $bay
             ? $query->doesntHave('manifestItem')->where('current_location_id', $bay->getKey())
             : $query->whereRaw('1 = 0');
+        // Waiting in a holding lane on purpose: placed, but not available to load.
+        $held = fn (Builder $query) => $query
+            ->doesntHave('manifestItem')
+            ->whereHas('currentLocation', fn (Builder $location) => $location->where('type', LocationType::HoldingArea));
         $notInBay = fn (Builder $query) => $query
             ->doesntHave('manifestItem')
             ->where(fn (Builder $where) => $where
                 ->whereNull('current_location_id')
-                ->when($bay, fn (Builder $q) => $q->orWhere('current_location_id', '!=', $bay?->getKey())));
+                ->orWhereHas('currentLocation', fn (Builder $location) => $location
+                    ->where('type', '!=', LocationType::HoldingArea)
+                    ->when($bay, fn (Builder $q) => $q->where('id', '!=', $bay?->getKey()))));
 
         $query = Consignment::query()
             ->whereHas('handlingUnits', $onThisTrailer)
@@ -66,6 +72,7 @@ class ManifestConsignmentBoard
                 'handlingUnits as other_trailer_count' => $onOtherTrailer,
                 'handlingUnits as in_bay_count' => $inBay,
                 'handlingUnits as not_in_bay_count' => $notInBay,
+                'handlingUnits as held_count' => $held,
             ])
             // Orders with something still to find come first; finished ones sink.
             ->orderByRaw('on_trailer_count >= item_count')
@@ -80,26 +87,54 @@ class ManifestConsignmentBoard
             'ready' => $query
                 ->having('on_trailer_count', '<', DB::raw('item_count'))
                 ->havingRaw("{$notInBayTotal} = 0")
+                ->having('held_count', '=', 0)
                 ->having('in_bay_count', '>', 0),
             'not_ready' => $query
                 ->having('on_trailer_count', '<', DB::raw('item_count'))
                 ->havingRaw("{$notInBayTotal} > 0"),
+            'split' => $query->having('other_trailer_count', '>', 0),
             default => null,
         };
 
         $page = $query->paginate($perPage);
+        $consignmentIds = $page->getCollection()->modelKeys();
+
+        // The other manifests each split consignment also sits on, and the
+        // holding lanes its held pieces are in, so the row can say where to look.
+        $splitManifests = DB::table('manifest_items')
+            ->join('handling_units', 'handling_units.id', '=', 'manifest_items.handling_unit_id')
+            ->join('manifests', 'manifests.id', '=', 'manifest_items.manifest_id')
+            ->whereIn('handling_units.consignment_id', $consignmentIds)
+            ->where('manifest_items.manifest_id', '!=', $manifestId)
+            ->select('handling_units.consignment_id', 'manifests.manifest_number')
+            ->distinct()
+            ->orderBy('manifests.manifest_number')
+            ->get()
+            ->groupBy('consignment_id')
+            ->map(fn ($rows): array => $rows->pluck('manifest_number')->all());
+
+        $heldLanes = HandlingUnit::query()
+            ->whereIn('consignment_id', $consignmentIds)
+            ->tap($held)
+            ->with('currentLocation:id,code')
+            ->get()
+            ->groupBy('consignment_id')
+            ->map(fn ($units): array => $units->map(fn (HandlingUnit $unit): ?string => $unit->currentLocation?->code)
+                ->filter()->unique()->sort()->values()->all());
 
         $flags = HandlingUnit::query()
-            ->whereIn('consignment_id', $page->getCollection()->modelKeys())
+            ->whereIn('consignment_id', $consignmentIds)
             ->where(fn (Builder $where) => $where->whereNotNull('dg_class')->orWhere('is_food', true))
             ->get(['consignment_id', 'dg_class', 'is_food'])
             ->groupBy('consignment_id');
 
-        $rows = $page->through(function (Consignment $consignment) use ($flags, $bay): array {
+        $rows = $page->through(function (Consignment $consignment) use ($flags, $bay, $splitManifests, $heldLanes): array {
             $unitFlags = $flags->get($consignment->getKey(), collect());
             $missing = max($consignment->item_count - (int) $consignment->getAttribute('units_count'), 0);
             $notInBayCount = (int) $consignment->getAttribute('not_in_bay_count') + $missing;
             $inBayCount = (int) $consignment->getAttribute('in_bay_count');
+            $heldCount = (int) $consignment->getAttribute('held_count');
+            $otherTrailers = (int) $consignment->getAttribute('other_trailer_count');
             $onTrailer = (int) $consignment->getAttribute('on_trailer_count');
 
             return [
@@ -110,13 +145,18 @@ class ManifestConsignmentBoard
                 'service_code' => $consignment->getAttribute('service_code'),
                 'item_count' => $consignment->item_count,
                 'on_trailer' => $onTrailer,
-                'on_other_trailers' => (int) $consignment->getAttribute('other_trailer_count'),
+                'on_other_trailers' => $otherTrailers,
+                'split' => $otherTrailers > 0,
+                'split_manifests' => $splitManifests->get($consignment->getKey(), []),
                 'in_bay' => $inBayCount,
+                'held' => $heldCount,
+                'held_lanes' => $heldLanes->get($consignment->getKey(), []),
                 'not_in_bay' => $notInBayCount,
                 'bay_code' => $bay?->code,
                 'state' => match (true) {
                     $onTrailer >= $consignment->item_count => 'complete',
                     $notInBayCount > 0 => 'not_ready',
+                    $heldCount > 0 => 'held',
                     $inBayCount > 0 => 'ready',
                     default => 'elsewhere',
                 },
@@ -161,13 +201,16 @@ class ManifestConsignmentBoard
         $pieces = $units->map(function (HandlingUnit $unit) use ($manifest, $bay, $events): array {
             $item = $unit->manifestItem;
 
+            // A pallet has "arrived" once a cuber or runner has scanned it; before
+            // that the depot has no record of it.
             [$state, $label] = match (true) {
-                $item !== null && $item->manifest_id === $manifest->getKey() => ['this_trailer', 'Loaded on this trailer'],
-                $item !== null => ['other_trailer', 'Loaded on '.$item->manifest?->manifest_number],
+                $item !== null && $item->manifest_id === $manifest->getKey() => ['this_trailer', 'On this trailer'],
+                $item !== null => ['other_trailer', 'On '.$item->manifest?->manifest_number],
+                $unit->currentLocation?->type === LocationType::HoldingArea => ['held', 'Held in '.$unit->currentLocation->code],
                 $bay !== null && $unit->current_location_id === $bay->getKey() => ['in_bay', 'In the '.$bay->code.' bay'],
-                $unit->currentLocation !== null => ['elsewhere', 'In '.$unit->currentLocation->code],
-                $unit->current_status->value === 'received' => ['elsewhere', 'Scanned in, location not recorded'],
-                default => ['not_scanned_in', 'Not scanned in yet'],
+                $unit->currentLocation !== null => ['elsewhere', 'Arrived, in '.$unit->currentLocation->code],
+                $unit->current_status->value === 'received' => ['elsewhere', 'Arrived, not in bay'],
+                default => ['not_scanned_in', 'Not arrived yet'],
             };
 
             return [
