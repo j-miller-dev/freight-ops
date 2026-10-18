@@ -7,6 +7,13 @@ export type LaneOption = {
     lane: number | null;
 };
 
+export type ConsignmentProgress = {
+    item_count: number;
+    in_bay: number;
+    held: number;
+    all_placed: boolean;
+};
+
 export type BayDirection = {
     handling_unit_id: string;
     barcode: string;
@@ -27,6 +34,7 @@ export type BayDirection = {
         lane: number | null;
     };
     reason: string;
+    progress: ConsignmentProgress;
     suggested_lane: number | null;
     alternatives: LaneOption[];
 };
@@ -117,14 +125,20 @@ export function useUnloadRunner() {
         setError('');
 
         try {
-            await postJson('/unload/confirm', {
-                barcode: direction.barcode,
-                location_id: override?.location_id ?? direction.bay.location_id,
-                client_event_id: pendingRef.current.clientEventId,
-                occurred_at: pendingRef.current.occurredAt,
-            });
+            const { data } = await postJson<{ data: BayDirection }>(
+                '/unload/confirm',
+                {
+                    barcode: direction.barcode,
+                    location_id:
+                        override?.location_id ?? direction.bay.location_id,
+                    client_event_id: pendingRef.current.clientEventId,
+                    occurred_at: pendingRef.current.occurredAt,
+                },
+            );
 
             pendingRef.current = null;
+            // Counts now include the pallet just dropped.
+            setDirection({ ...direction, progress: data.progress });
             setStage('dropped');
         } catch (confirmError) {
             if (
