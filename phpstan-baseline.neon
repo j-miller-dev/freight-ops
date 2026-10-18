@@ -13,48 +13,6 @@ parameters:
 			path: app/Actions/Loading/LoadHandlingUnit.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\>\:\:\$status\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\>\:\:\$loading_finished_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
-			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\>\:\:getKey\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
-			message: '#^Call to an undefined method App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\>\:\:forceFill\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
-			message: '#^Parameter \#1 \$manifest of class App\\Exceptions\\Loading\\ManifestNotOpen constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
-			message: '#^Parameter \$manifest of class App\\Exceptions\\Loading\\ManifestNotReadyToClose constructor expects App\\Models\\Manifest, App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
-			message: '#^Anonymous function should return App\\Models\\Manifest but returns App\\Models\\Manifest\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\Manifest\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Actions/Loading/CloseManifest.php
-
-		-
 			message: '#^Cannot call method toISOString\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1

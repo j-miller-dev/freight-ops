@@ -15,7 +15,7 @@ uses(TestCase::class, RefreshDatabase::class);
 
 function finishManifest(array $attributes = []): Manifest
 {
-    $manifest = Manifest::factory()->create(['status' => 'open'] + $attributes);
+    $manifest = Manifest::factory()->create($attributes + ['status' => 'open']);
     $manifest->destinations()->attach(Depot::factory()->create(), ['is_primary' => true]);
 
     return $manifest;
@@ -141,4 +141,48 @@ it('gives each user their own notifications to read', function () {
 
     $this->actingAs($scaler)->postJson(route('notifications.read', $id))->assertJsonPath('unread_count', 0);
     $this->postJson(route('notifications.read-all'))->assertJsonPath('unread_count', 0);
+});
+
+it('does not let the loader finish a manifest the scaler has closed', function () {
+    $manifest = finishManifest(['status' => 'closed', 'closed_at' => now()]);
+    $manifest->equipment()->create(['item' => 'straps', 'quantity' => 3]);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('loading.manifest.finish', $manifest), ['equipment' => ['straps' => 9]])
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'manifest_not_open');
+
+    expect($manifest->fresh()->loading_finished_at)->toBeNull()
+        ->and(ManifestEquipment::query()->where('manifest_id', $manifest->getKey())->where('item', 'straps')->value('quantity'))->toBe(3);
+});
+
+it('does not let the loader reopen a manifest the scaler has closed', function () {
+    $finishedAt = now()->subHour();
+    $loader = User::factory()->create();
+    $manifest = finishManifest([
+        'status' => 'closed',
+        'closed_at' => now(),
+        'loading_finished_at' => $finishedAt,
+        'loading_finished_by' => $loader->getKey(),
+    ]);
+
+    $this->actingAs($loader)
+        ->deleteJson(route('loading.manifest.reopen', $manifest))
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'manifest_not_open');
+
+    expect($manifest->fresh()->loading_finished_at)->not->toBeNull()
+        ->and($manifest->fresh()->loading_finished_by)->toBe($loader->getKey());
+});
+
+it('still lets the loader reopen their own sign-off while the manifest is open', function () {
+    $loader = User::factory()->create();
+    $manifest = finishManifest(['loading_finished_at' => now(), 'loading_finished_by' => $loader->getKey()]);
+
+    $this->actingAs($loader)
+        ->deleteJson(route('loading.manifest.reopen', $manifest))
+        ->assertOk()
+        ->assertJsonPath('data.finished', null);
+
+    expect($manifest->fresh()->loading_finished_at)->toBeNull();
 });

@@ -104,6 +104,10 @@ function eventLabel(event: PieceEvent): string {
                 : `Moved to ${event.manifest_number ?? 'another trailer'}`;
         case 'loaded':
             return `Loaded on ${event.manifest_number ?? 'a trailer'}`;
+        case 'manifest_closed':
+            return event.manifest_number
+                ? `Manifest ${event.manifest_number} closed`
+                : 'Manifest closed';
         default:
             return event.type.replaceAll('_', ' ');
     }

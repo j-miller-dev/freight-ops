@@ -18,7 +18,27 @@ import HoldingDialog from '@/components/unload/holding-dialog';
 import WarehouseMapDialog from '@/components/unload/warehouse-map-dialog';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
 import { useUnloadRunner } from '@/hooks/use-unload-runner';
+import type { ConsignmentProgress } from '@/hooks/use-unload-runner';
 import { cn } from '@/lib/utils';
+
+function progressMessage({
+    item_count,
+    in_bay,
+    held,
+    all_placed,
+}: ConsignmentProgress): string {
+    const heldNote = held > 0 ? `${held} held` : null;
+
+    if (all_placed) {
+        return [`All ${item_count} items placed`, heldNote]
+            .filter(Boolean)
+            .join(' · ');
+    }
+
+    return [`${in_bay} of ${item_count} in bay`, heldNote]
+        .filter(Boolean)
+        .join(' · ');
+}
 
 export default function Unload() {
     const runner = useUnloadRunner();
@@ -358,6 +378,15 @@ export default function Unload() {
                         <p className="text-lg text-muted-foreground">
                             {direction.connote_number} · piece{' '}
                             {direction.piece_number} of {direction.item_count}
+                        </p>
+                        <p
+                            className={
+                                direction.progress.all_placed
+                                    ? 'text-lg font-semibold text-success'
+                                    : 'text-lg text-muted-foreground'
+                            }
+                        >
+                            {progressMessage(direction.progress)}
                         </p>
                     </div>
                     <Button

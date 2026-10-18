@@ -39,6 +39,7 @@ class DirectionPayload
                 'lane' => $direction->lane,
             ],
             'reason' => $direction->reason,
+            'progress' => app(ConsignmentBayProgress::class)->for($consignment),
             'suggested_lane' => $direction->suggested?->lane,
             'alternatives' => ($alternatives ?? collect())
                 ->map(fn (Location $location): array => [

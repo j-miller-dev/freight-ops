@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Loading;
 
 use App\Enums\TrailerEquipment;
 use App\Enums\UserRole;
+use App\Exceptions\Loading\ManifestNotOpen;
 use App\Http\Controllers\Controller;
 use App\Models\Manifest;
 use App\Models\ManifestEquipment;
@@ -37,6 +38,13 @@ class FinishManifestLoadingController extends Controller
         $firstTime = false;
 
         DB::transaction(function () use ($manifest, $request, $items, &$firstTime): void {
+            // Once the scaler has closed it, the loader's sign-off is history.
+            $locked = Manifest::query()->whereKey($manifest->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($locked->status !== 'open') {
+                throw new ManifestNotOpen($locked);
+            }
+
             foreach ($items as $item => $quantity) {
                 ManifestEquipment::query()->updateOrCreate(
                     ['manifest_id' => $manifest->getKey(), 'item' => $item],
@@ -44,7 +52,6 @@ class FinishManifestLoadingController extends Controller
                 );
             }
 
-            $locked = Manifest::query()->whereKey($manifest->getKey())->lockForUpdate()->firstOrFail();
             $firstTime = $locked->loading_finished_at === null;
 
             if ($firstTime) {
@@ -81,7 +88,19 @@ class FinishManifestLoadingController extends Controller
     {
         Gate::authorize('load', $manifest);
 
-        $manifest->forceFill(['loading_finished_at' => null, 'loading_finished_by' => null])->save();
+        // The loader can take their own sign-off back, but not once the scaler
+        // has closed the manifest: only the scaler can reopen it from then on.
+        DB::transaction(function () use ($manifest): void {
+            $locked = Manifest::query()->whereKey($manifest->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($locked->status !== 'open') {
+                throw new ManifestNotOpen($locked);
+            }
+
+            $locked->forceFill(['loading_finished_at' => null, 'loading_finished_by' => null])->save();
+        });
+
+        $manifest->refresh();
 
         return response()->json(['data' => $this->state($manifest, $counts->for($manifest))]);
     }

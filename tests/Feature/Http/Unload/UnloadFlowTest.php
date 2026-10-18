@@ -494,3 +494,77 @@ it('rejects a lane override for freight that is not held', function () {
         ->assertJsonPath('error.code', 'direction_changed')
         ->assertJsonPath('error.details.bay_code', 'SYD02');
 });
+
+it('reports how much of the consignment is in the bay after each drop', function () {
+    $yard = unloadYard();
+    $runner = User::factory()->create();
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $yard['destination']->getKey(),
+        'item_count' => 2,
+    ]);
+    $first = HandlingUnit::factory()->for($consignment)->create();
+    $second = HandlingUnit::factory()->for($consignment)->create();
+
+    $this->actingAs($runner)
+        ->postJson(route('unload.confirm'), dropPayload($first, $yard['bay']))
+        ->assertOk()
+        ->assertJsonPath('data.progress', ['item_count' => 2, 'in_bay' => 1, 'held' => 0, 'all_placed' => false]);
+
+    $this->actingAs($runner)
+        ->postJson(route('unload.confirm'), dropPayload($second, $yard['bay']))
+        ->assertOk()
+        ->assertJsonPath('data.progress', ['item_count' => 2, 'in_bay' => 2, 'held' => 0, 'all_placed' => true]);
+});
+
+it('counts held pallets apart from the bay and still treats the consignment as placed', function () {
+    $yard = unloadYard();
+    $runner = User::factory()->create();
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $yard['destination']->getKey(),
+        'sender_name' => 'Harbourline Hardware',
+        'item_count' => 2,
+    ]);
+    $inBay = HandlingUnit::factory()->for($consignment)->create();
+    $held = HandlingUnit::factory()->for($consignment)->create();
+
+    // The first pallet went to the bay before the sender's holding rule existed.
+    $this->actingAs($runner)->postJson(route('unload.confirm'), dropPayload($inBay, $yard['bay']))->assertOk();
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware']);
+
+    $this->actingAs($runner)
+        ->postJson(route('unload.confirm'), dropPayload($held, $yard['holding']))
+        ->assertOk()
+        ->assertJsonPath('data.progress', ['item_count' => 2, 'in_bay' => 1, 'held' => 1, 'all_placed' => true]);
+});
+
+it('does not count pallets already loaded on a trailer', function () {
+    $yard = unloadYard();
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $yard['destination']->getKey(),
+        'item_count' => 2,
+    ]);
+    $loaded = HandlingUnit::factory()->for($consignment)->create(['current_location_id' => $yard['bay']->getKey()]);
+    ManifestItem::factory()->create(['handling_unit_id' => $loaded->getKey()]);
+    $waiting = HandlingUnit::factory()->for($consignment)->create();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($waiting, $yard['bay']))
+        ->assertOk()
+        ->assertJsonPath('data.progress.in_bay', 1)
+        ->assertJsonPath('data.progress.all_placed', false);
+});
+
+it('shows the consignment progress when a pallet is scanned, before it is confirmed', function () {
+    $yard = unloadYard();
+    $consignment = Consignment::factory()->create([
+        'destination_depot_id' => $yard['destination']->getKey(),
+        'item_count' => 3,
+    ]);
+    HandlingUnit::factory()->for($consignment)->create(['current_location_id' => $yard['bay']->getKey()]);
+    $scanned = HandlingUnit::factory()->for($consignment)->create();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.direction'), ['barcode' => $scanned->barcode])
+        ->assertOk()
+        ->assertJsonPath('data.progress', ['item_count' => 3, 'in_bay' => 1, 'held' => 0, 'all_placed' => false]);
+});

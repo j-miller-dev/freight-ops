@@ -409,13 +409,15 @@ export default function LoadingManifest({
                         })}
                         . The scaler has been told.
                     </p>
-                    <Button
-                        variant="outline"
-                        className="h-11 rounded-xl"
-                        onClick={() => void reopenLoading()}
-                    >
-                        Reopen to keep loading
-                    </Button>
+                    {status === 'open' && (
+                        <Button
+                            variant="outline"
+                            className="h-11 rounded-xl"
+                            onClick={() => void reopenLoading()}
+                        >
+                            Reopen to keep loading
+                        </Button>
+                    )}
                 </section>
             ) : (
                 status === 'open' && (
