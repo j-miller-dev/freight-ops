@@ -1,12 +1,14 @@
 <?php
 
 use App\Actions\Loading\CloseManifest;
+use App\Enums\EventType;
 use App\Exceptions\Loading\ManifestNotOpen;
 use App\Exceptions\Loading\ManifestNotReadyToClose;
 use App\Models\Consignment;
 use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
+use App\Models\OperationalEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -107,4 +109,53 @@ it('refuses to close a manifest that is already closed', function () {
 
     expect(fn () => app(CloseManifest::class)->handle($manifest, $scaler, acknowledged: true))
         ->toThrow(ManifestNotOpen::class);
+});
+
+it('records one manifest_closed event for each pallet on the manifest', function () {
+    $manifest = Manifest::factory()->create([
+        'status' => 'open',
+        'manifest_number' => 'MEL-SYD-261019-1',
+        'loading_finished_at' => now(),
+    ]);
+    $consignment = loadOnePalletConsignment($manifest);
+    $second = loadOnePalletConsignment($manifest);
+    $scaler = User::factory()->scaler()->create();
+
+    app(CloseManifest::class)->handle($manifest, $scaler);
+
+    $events = OperationalEvent::query()->where('event_type', EventType::ManifestClosed)->get();
+
+    expect($events)->toHaveCount(2)
+        ->and($events->pluck('handling_unit_id')->all())->toEqualCanonicalizing(
+            $consignment->handlingUnits()->pluck('id')
+                ->merge($second->handlingUnits()->pluck('id'))->all(),
+        )
+        ->and($events->first()->actor_id)->toBe($scaler->getKey())
+        ->and($events->first()->metadata)->toMatchArray([
+            'manifest_id' => $manifest->getKey(),
+            'manifest_number' => 'MEL-SYD-261019-1',
+            'closed_with_warnings' => false,
+        ]);
+});
+
+it('flags the closing events when the manifest was closed with warnings', function () {
+    $manifest = Manifest::factory()->create(['status' => 'open', 'loading_finished_at' => null]);
+    loadOnePalletConsignment($manifest);
+    $scaler = User::factory()->scaler()->create();
+
+    app(CloseManifest::class)->handle($manifest, $scaler, acknowledged: true);
+
+    expect(OperationalEvent::query()->where('event_type', EventType::ManifestClosed)->first()->metadata)
+        ->toMatchArray(['closed_with_warnings' => true]);
+});
+
+it('writes no closing events when the close is refused', function () {
+    $manifest = Manifest::factory()->create(['status' => 'open', 'loading_finished_at' => null]);
+    loadOnePalletConsignment($manifest);
+    $scaler = User::factory()->scaler()->create();
+
+    expect(fn () => app(CloseManifest::class)->handle($manifest, $scaler))
+        ->toThrow(ManifestNotReadyToClose::class);
+
+    expect(OperationalEvent::query()->where('event_type', EventType::ManifestClosed)->count())->toBe(0);
 });
