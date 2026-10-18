@@ -159,8 +159,11 @@ class SydneyFreightSeeder extends Seeder
         // Which trailer carries each manifest: the own fleet plus two contractors.
         $assigned = ['F-Ops 1', 'F-Ops 2', 'F-Ops 3', 'Russell Coight Transport', 'Dingo Creek Haulage', 'F-Ops 1', 'F-Ops 2'];
         $manifests = [];
+        $finisher = User::query()->where('email', 'test@example.com')->first();
+        $closer = User::query()->where('role', 'scaler')->orderBy('id')->first();
 
         for ($n = 1; $n <= self::MANIFEST_COUNT; $n++) {
+            $isClosed = $n === self::MANIFEST_COUNT;
             $manifest = Manifest::query()->updateOrCreate(
                 ['source' => 'seed', 'external_id' => "seed-mel-syd-{$n}"],
                 [
@@ -168,17 +171,22 @@ class SydneyFreightSeeder extends Seeder
                     'trailer_id' => $fleet[$assigned[$n - 1]]->getKey(),
                     'loading_finished_at' => null,
                     'loading_finished_by' => null,
-                    'manifest_number' => sprintf('MEL-SYD-2610%02d', $n),
+                    // Same shape as the upstream numbers: MEL-SYD-{yymmdd}-{run}.
+                    'manifest_number' => sprintf('MEL-SYD-%s-%d', today()->format('ymd'), $n),
                     'service_date' => today()->toDateString(),
                     'departs_at' => now()->addMinutes($departures[$n - 1]),
                     // The last one is already gone, to exercise the closed state.
-                    'status' => $n === self::MANIFEST_COUNT ? 'closed' : 'open',
+                    'status' => $isClosed ? 'closed' : 'open',
                     'trailer_label' => "SYD FreightOps {$n}",
                     'trailer_type' => $trailers[$n - 1],
                     'source_updated_at' => now(),
                     'last_synced_at' => now(),
                 ],
             );
+
+            if ($isClosed) {
+                $manifest->forceFill($this->closedState($departures[$n - 1], $finisher, $closer))->save();
+            }
 
             $manifest->destinations()->syncWithoutDetaching([
                 $destination->getKey() => ['is_primary' => true],
@@ -188,6 +196,30 @@ class SydneyFreightSeeder extends Seeder
         }
 
         return $manifests;
+    }
+
+    /**
+     * How the already-departed manifest looks after a scaler closed it. It never
+     * had pallets built onto it, so the reconciliation snapshot is empty but clean.
+     *
+     * @return array<string, mixed>
+     */
+    private function closedState(int $departsInMinutes, ?User $finisher, ?User $closer): array
+    {
+        $departedAt = now()->addMinutes($departsInMinutes);
+
+        return [
+            'loading_finished_at' => $departedAt->copy()->subMinutes(30),
+            'loading_finished_by' => $finisher?->getKey(),
+            'closed_at' => $departedAt,
+            'closed_by' => $closer?->getKey(),
+            'close_summary' => [
+                'consignments_total' => 0,
+                'consignments_complete' => 0,
+                'loading_finished' => true,
+                'closed_with_warnings' => false,
+            ],
+        ];
     }
 
     /**
