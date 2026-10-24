@@ -5,6 +5,7 @@ import {
     CircleCheck,
     PauseCircle,
     Package,
+    Split,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AlertError from '@/components/alert-error';
@@ -47,10 +48,13 @@ const FILTERS = [
     { value: 'ready', label: 'Ready in bay' },
     { value: 'not_ready', label: 'Not in bay' },
     { value: 'complete', label: 'Complete' },
+    { value: 'split', label: 'Split' },
 ] as const;
 
 // Green means "everything still to load is sitting in the bay"; amber means
-// something is missing from it, so there is no point searching the bay alone.
+// something is missing from it, so there is no point searching the bay alone;
+// orange means nothing is missing but some pieces are waiting in a holding lane.
+// Blue is separate: the Split chip, for pieces on another manifest.
 const STATE: Record<
     ConsignmentState,
     { label: (row: ConsignmentRow) => string; border: string; chip: string }
@@ -64,6 +68,11 @@ const STATE: Record<
         label: (row) => `${row.not_in_bay} not in ${row.bay_code ?? 'bay'}`,
         border: 'border-l-warning',
         chip: 'bg-warning text-warning-foreground',
+    },
+    held: {
+        label: (row) => `${row.held} held`,
+        border: 'border-l-orange-500',
+        chip: 'bg-orange-500 text-white',
     },
     complete: {
         label: () => 'All loaded',
@@ -81,6 +90,7 @@ const PIECE_TONE: Record<PieceState, string> = {
     this_trailer: 'bg-primary text-primary-foreground',
     other_trailer: 'bg-muted text-foreground',
     in_bay: 'bg-success text-success-foreground',
+    held: 'bg-orange-500 text-white',
     elsewhere: 'bg-warning text-warning-foreground',
     not_scanned_in: 'bg-destructive text-white',
 };
@@ -111,6 +121,14 @@ function eventLabel(event: PieceEvent): string {
         default:
             return event.type.replaceAll('_', ' ');
     }
+}
+
+function SplitBadge() {
+    return (
+        <Badge className="gap-1 bg-blue-600 text-white">
+            <Split className="size-3.5" /> Split
+        </Badge>
+    );
 }
 
 function Flags({ dg, food }: { dg: string[]; food: boolean }) {
@@ -459,7 +477,10 @@ export default function ConsignmentSheet({
                                                 }
                                                 className={cn(
                                                     'flex w-full items-center gap-3 rounded-2xl border border-l-8 bg-card px-4 py-3 text-left shadow-xs transition active:scale-[0.99]',
-                                                    STATE[row.state].border,
+                                                    row.held_back
+                                                        ? 'border-l-destructive'
+                                                        : STATE[row.state]
+                                                              .border,
                                                 )}
                                             >
                                                 <Package className="size-6 shrink-0 text-muted-foreground" />
@@ -473,6 +494,9 @@ export default function ConsignmentSheet({
                                                             dg={row.dg_classes}
                                                             food={row.has_food}
                                                         />
+                                                        {row.split && (
+                                                            <SplitBadge />
+                                                        )}
                                                         {row.held_back && (
                                                             <HoldBackBadge />
                                                         )}
@@ -484,11 +508,12 @@ export default function ConsignmentSheet({
                                                     </span>
                                                     <span className="block text-xs text-muted-foreground tabular-nums">
                                                         {[
-                                                            row.on_other_trailers >
-                                                                0 &&
-                                                                `${row.on_other_trailers} on other trailers`,
+                                                            row.split &&
+                                                                `${row.on_other_trailers} on ${row.split_manifests.join(', ')}`,
                                                             row.in_bay > 0 &&
                                                                 `${row.in_bay} in ${row.bay_code ?? 'bay'}`,
+                                                            row.held > 0 &&
+                                                                `${row.held} held in ${row.held_lanes.join(', ')}`,
                                                         ]
                                                             .filter(Boolean)
                                                             .join(' · ')}
