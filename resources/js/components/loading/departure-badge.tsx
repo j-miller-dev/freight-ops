@@ -11,13 +11,20 @@ function span(minutes: number): string {
 
 export default function DepartureBadge({
     departsAt,
+    compact = false,
 }: {
     departsAt: string | null;
+    // A single-line pill for the page header instead of a full tile.
+    compact?: boolean;
 }) {
     const now = useNow();
 
     if (!departsAt) {
-        return (
+        return compact ? (
+            <span className="rounded-full border bg-card px-3 py-1.5 text-sm text-muted-foreground">
+                Departure not set
+            </span>
+        ) : (
             <div className="rounded-2xl border bg-card px-4 py-3">
                 <p className="text-xs text-muted-foreground">Departs</p>
                 <p className="text-lg font-semibold text-muted-foreground">
@@ -37,6 +44,26 @@ export default function DepartureBadge({
           : minutes <= 120
             ? 'bg-warning text-warning-foreground'
             : 'bg-card';
+
+    if (compact) {
+        return (
+            <span
+                className={cn(
+                    'flex items-center gap-2 rounded-full border px-4 py-2 text-base font-bold tabular-nums',
+                    tone,
+                )}
+            >
+                <Clock className="size-4" />
+                {departure.toLocaleTimeString([], {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                })}
+                <span className="text-sm font-medium opacity-80">
+                    {departed ? `${span(-minutes)} ago` : `in ${span(minutes)}`}
+                </span>
+            </span>
+        );
+    }
 
     return (
         <div className={cn('rounded-2xl border px-4 py-3', tone)}>

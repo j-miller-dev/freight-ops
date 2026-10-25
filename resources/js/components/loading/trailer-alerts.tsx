@@ -1,5 +1,6 @@
 import { Apple, TriangleAlert } from 'lucide-react';
 import DgDiamond from '@/components/loading/dg-diamond';
+import { cn } from '@/lib/utils';
 import type { ManifestSummary } from '@/types/loading';
 
 export function ClashBanner({ summary }: { summary: ManifestSummary }) {
@@ -21,21 +22,39 @@ export function ClashBanner({ summary }: { summary: ManifestSummary }) {
 
 export default function TrailerAlerts({
     summary,
+    strip = false,
 }: {
     summary: ManifestSummary;
+    // A slim row with no card or title, hidden when there is nothing on board.
+    strip?: boolean;
 }) {
     const empty = summary.dg.length === 0 && summary.food_count === 0;
 
+    if (strip && empty) {
+        return null;
+    }
+
     return (
-        <div className="rounded-2xl border bg-card px-4 py-3">
-            <p className="text-xs text-muted-foreground">On board</p>
+        <div
+            className={cn(
+                strip ? 'px-1' : 'rounded-2xl border bg-card px-4 py-3',
+            )}
+        >
+            {!strip && (
+                <p className="text-xs text-muted-foreground">On board</p>
+            )}
 
             {empty ? (
                 <p className="text-lg font-semibold text-muted-foreground">
                     No DG or food
                 </p>
             ) : (
-                <div className="mt-1 flex flex-wrap items-center gap-3">
+                <div
+                    className={cn(
+                        'flex flex-wrap items-center gap-3',
+                        !strip && 'mt-1',
+                    )}
+                >
                     {summary.dg.map((group) => (
                         <span
                             key={group.class}
