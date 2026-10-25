@@ -1,23 +1,26 @@
 import { Head } from '@inertiajs/react';
 import {
+    Boxes,
     Camera,
     CameraOff,
-    ChevronRight,
     CircleCheck,
     Keyboard,
     ListChecks,
+    Lock,
     Truck,
+    TriangleAlert,
     WifiOff,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import AlertError from '@/components/alert-error';
+import ActionRail, { RailButton } from '@/components/loading/action-rail';
 import CloseManifestDialog from '@/components/loading/close-manifest-dialog';
 import ConsignmentSheet from '@/components/loading/consignment-sheet';
 import DepartureBadge from '@/components/loading/departure-badge';
+import EquipmentDialog from '@/components/loading/equipment-dialog';
 import FinishDialog from '@/components/loading/finish-dialog';
 import ScanFeedback from '@/components/loading/scan-feedback';
-import Stepper from '@/components/loading/stepper';
 import TrailerAlerts, {
     ClashBanner,
 } from '@/components/loading/trailer-alerts';
@@ -142,6 +145,7 @@ export default function LoadingManifest({
     );
     const [finished, setFinished] = useState(initialFinished);
     const [finishOpen, setFinishOpen] = useState(false);
+    const [equipmentOpen, setEquipmentOpen] = useState(false);
     const [status, setStatus] = useState(manifest.status);
     const [closedState, setClosedState] = useState(initialClosed);
     const [closeOpen, setCloseOpen] = useState(false);
@@ -288,319 +292,305 @@ export default function LoadingManifest({
                         : '/loading'
                 }
                 actions={
-                    canClose &&
-                    status === 'open' && (
-                        <Button
-                            variant="outline"
-                            className="h-11 rounded-xl"
-                            onClick={() => setCloseOpen(true)}
-                        >
-                            Close manifest
-                        </Button>
-                    )
+                    <DepartureBadge departsAt={manifest.departs_at} compact />
                 }
             />
 
-            <div className="mb-4 space-y-2 empty:hidden">
-                {!outbox.isOnline && (
-                    <p className="flex items-center gap-2 rounded-xl bg-warning px-4 py-3 font-medium text-warning-foreground">
-                        <WifiOff className="size-5" /> Offline — scans are
-                        saving on this device.
-                    </p>
-                )}
-                {outbox.pendingCount > 0 && (
-                    <p className="rounded-xl bg-warning/30 px-4 py-3 font-medium">
-                        {outbox.pendingCount}{' '}
-                        {outbox.pendingCount === 1 ? 'scan' : 'scans'} waiting
-                        to sync.
-                    </p>
-                )}
-                {outbox.hasFailed && (
-                    <p className="rounded-xl bg-destructive px-4 py-3 font-medium text-white">
-                        Some scans could not be delivered. Tell a supervisor.
-                    </p>
-                )}
-                {status !== 'open' && (
-                    <p className="rounded-xl bg-muted px-4 py-3 font-medium">
-                        This manifest is closed
-                        {closedState?.by ? ` by ${closedState.by}` : ''}
-                        {closedState?.at
-                            ? ` at ${new Date(closedState.at).toLocaleString([], { hour: 'numeric', minute: '2-digit' })}`
-                            : ''}
-                        . Scanning is disabled.
-                    </p>
-                )}
-            </div>
-
-            <ClashBanner summary={summary} />
-
-            <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <DepartureBadge departsAt={manifest.departs_at} />
-
-                <button
-                    type="button"
-                    onClick={() => setTrailerOpen(true)}
-                    disabled={closed}
-                    className="rounded-2xl border bg-card px-4 py-3 text-left transition hover:border-primary active:scale-[0.98] disabled:opacity-60"
-                >
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Truck className="size-3.5" /> Trailer · tap to change
-                    </p>
-                    <p className="text-lg font-bold">{trailerInfo.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                        {trailerInfo.confirmed
-                            ? `${trailerInfo.capacity} pallet positions`
-                            : 'Layout to be confirmed'}
-                    </p>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setConsignmentsOpen(true)}
-                    className="rounded-2xl border bg-primary px-4 py-3 text-left text-primary-foreground transition active:scale-[0.98]"
-                >
-                    <p className="flex items-center gap-1.5 text-xs opacity-80">
-                        <ListChecks className="size-3.5" /> Consignments loaded
-                    </p>
-                    <p className="text-lg font-bold tabular-nums">
-                        {summary.consignments_complete} /{' '}
-                        {summary.consignments_total}{' '}
-                        <span className="text-sm font-normal">complete</span>
-                    </p>
-                    <p className="flex items-center text-xs opacity-80">
-                        {summary.loaded_count}
-                        {trailerInfo.capacity
-                            ? ` / ${trailerInfo.capacity}`
-                            : ''}{' '}
-                        pallets
-                        {trailerInfo.capacity > 0 &&
-                        summary.loaded_count > trailerInfo.capacity ? (
-                            <span className="ml-1 rounded bg-warning px-1.5 font-semibold text-warning-foreground">
-                                over by{' '}
-                                {summary.loaded_count - trailerInfo.capacity}
-                            </span>
-                        ) : (
-                            " · tap for what's left"
-                        )}
-                        <ChevronRight className="size-3.5" />
-                    </p>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setMapOpen(true)}
-                    disabled={summary.dg_items.length === 0}
-                    aria-label="Show dangerous goods on the trailer map"
-                    className="text-left transition active:scale-[0.98] disabled:active:scale-100"
-                >
-                    <TrailerAlerts summary={summary} />
-                </button>
-            </section>
-
-            {finished ? (
-                <section className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/15 px-4 py-3">
-                    <CircleCheck className="size-6 shrink-0 text-success" />
-                    <p className="min-w-0 flex-1 font-medium">
-                        Loading finished
-                        {finished.by ? ` by ${finished.by}` : ''} at{' '}
-                        {new Date(finished.at).toLocaleTimeString([], {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                        })}
-                        . The scaler has been told.
-                    </p>
-                    {status === 'open' && (
-                        <Button
-                            variant="outline"
-                            className="h-11 rounded-xl"
-                            onClick={() => void reopenLoading()}
-                        >
-                            Reopen to keep loading
-                        </Button>
-                    )}
-                </section>
-            ) : (
-                status === 'open' && (
-                    <section className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                        <Stepper
-                            label="Red pallets"
-                            swatch="bg-red-500"
-                            value={counts.red_pallets ?? 0}
-                            onChange={(delta) =>
-                                void adjust('red_pallets', delta)
-                            }
-                        />
-                        <Stepper
-                            label="Blue pallets"
-                            swatch="bg-blue-500"
-                            value={counts.blue_pallets ?? 0}
-                            onChange={(delta) =>
-                                void adjust('blue_pallets', delta)
-                            }
-                        />
-                        <Button
-                            variant="success"
-                            className="h-auto min-h-14 rounded-2xl px-6 text-base font-semibold"
+            <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                <ActionRail>
+                    <RailButton
+                        icon={ListChecks}
+                        label="Consignments"
+                        badge={`${summary.consignments_complete}/${summary.consignments_total}`}
+                        onClick={() => setConsignmentsOpen(true)}
+                    />
+                    <RailButton
+                        icon={Truck}
+                        label={trailerInfo.label}
+                        onClick={() => setTrailerOpen(true)}
+                        disabled={closed}
+                    />
+                    <RailButton
+                        icon={TriangleAlert}
+                        label="DG map"
+                        badge={summary.dg_items.length || undefined}
+                        tone={
+                            summary.food_conflicts.length > 0
+                                ? 'danger'
+                                : 'default'
+                        }
+                        onClick={() => setMapOpen(true)}
+                        disabled={summary.dg_items.length === 0}
+                    />
+                    <RailButton
+                        icon={Boxes}
+                        label="Equipment"
+                        onClick={() => setEquipmentOpen(true)}
+                        disabled={closed}
+                    />
+                    {status === 'open' && !finished && (
+                        <RailButton
+                            icon={CircleCheck}
+                            label="Finish"
+                            tone="success"
                             onClick={() => setFinishOpen(true)}
-                        >
-                            <CircleCheck className="size-5" /> Finish loading
-                        </Button>
-                    </section>
-                )
-            )}
+                        />
+                    )}
+                    {canClose && status === 'open' && (
+                        <RailButton
+                            icon={Lock}
+                            label="Close"
+                            onClick={() => setCloseOpen(true)}
+                        />
+                    )}
+                </ActionRail>
+                <div className="min-w-0 flex-1">
+                    <div className="mb-4 space-y-2 empty:hidden">
+                        {!outbox.isOnline && (
+                            <p className="flex items-center gap-2 rounded-xl bg-warning px-4 py-3 font-medium text-warning-foreground">
+                                <WifiOff className="size-5" /> Offline — scans
+                                are saving on this device.
+                            </p>
+                        )}
+                        {outbox.pendingCount > 0 && (
+                            <p className="rounded-xl bg-warning/30 px-4 py-3 font-medium">
+                                {outbox.pendingCount}{' '}
+                                {outbox.pendingCount === 1 ? 'scan' : 'scans'}{' '}
+                                waiting to sync.
+                            </p>
+                        )}
+                        {outbox.hasFailed && (
+                            <p className="rounded-xl bg-destructive px-4 py-3 font-medium text-white">
+                                Some scans could not be delivered. Tell a
+                                supervisor.
+                            </p>
+                        )}
+                        {status !== 'open' && (
+                            <p className="rounded-xl bg-muted px-4 py-3 font-medium">
+                                This manifest is closed
+                                {closedState?.by ? ` by ${closedState.by}` : ''}
+                                {closedState?.at
+                                    ? ` at ${new Date(closedState.at).toLocaleString([], { hour: 'numeric', minute: '2-digit' })}`
+                                    : ''}
+                                . Scanning is disabled.
+                            </p>
+                        )}
+                    </div>
 
-            <section className="mx-auto grid max-w-4xl gap-8 rounded-3xl border bg-card p-6 shadow-xs lg:grid-cols-2 lg:items-center">
-                <div className="flex flex-col gap-4">
-                    <div className="w-full space-y-3">
-                        <label
-                            htmlFor="barcode"
-                            className="block text-center text-sm font-medium text-muted-foreground"
-                        >
-                            Scan item ID
-                        </label>
+                    <ClashBanner summary={summary} />
 
-                        <div className="flex gap-2">
-                            <Input
-                                id="barcode"
-                                ref={inputRef}
-                                value={scanner.barcode}
-                                onChange={(event) =>
-                                    scanner.setBarcode(event.target.value)
-                                }
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                        event.preventDefault();
-                                        scanner.scan(scanner.barcode);
-                                    }
-                                }}
-                                placeholder="Barcode"
-                                inputMode={keyboard ? 'text' : 'none'}
-                                autoComplete="off"
-                                autoCapitalize="characters"
-                                disabled={busy || closed}
-                                className="h-16 rounded-xl text-center text-2xl"
-                            />
+                    <button
+                        type="button"
+                        onClick={() => setMapOpen(true)}
+                        disabled={summary.dg_items.length === 0}
+                        aria-label="Show dangerous goods on the trailer map"
+                        className="mb-4 block text-left empty:hidden disabled:cursor-default"
+                    >
+                        <TrailerAlerts summary={summary} strip />
+                    </button>
 
-                            <Button
-                                type="button"
-                                variant={keyboard ? 'default' : 'outline'}
-                                size="icon"
-                                aria-label="Toggle on-screen keyboard"
-                                aria-pressed={keyboard}
-                                className="size-16 shrink-0 rounded-xl"
-                                onClick={() => {
-                                    setKeyboard((value) => !value);
-                                    inputRef.current?.focus();
-                                }}
-                            >
-                                <Keyboard className="size-6" />
-                            </Button>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <Button
-                                type="button"
-                                size="xl"
-                                className="flex-1"
-                                onClick={() => scanner.scan(scanner.barcode)}
-                                disabled={
-                                    !scanner.barcode.trim() || busy || closed
-                                }
-                            >
-                                {scanner.scanning ? 'Loading…' : 'Load'}
-                            </Button>
-
-                            {camera.supported && (
+                    {finished && (
+                        <section className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/15 px-4 py-3">
+                            <CircleCheck className="size-6 shrink-0 text-success" />
+                            <p className="min-w-0 flex-1 font-medium">
+                                Loading finished
+                                {finished.by
+                                    ? ` by ${finished.by}`
+                                    : ''} at{' '}
+                                {new Date(finished.at).toLocaleTimeString([], {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                })}
+                                . The scaler has been told.
+                            </p>
+                            {status === 'open' && (
                                 <Button
-                                    type="button"
                                     variant="outline"
-                                    size="xl"
-                                    aria-label={
-                                        camera.active
-                                            ? 'Stop camera'
-                                            : 'Scan with camera'
-                                    }
-                                    onClick={() =>
-                                        camera.active
-                                            ? camera.stop()
-                                            : void camera.start()
-                                    }
-                                    disabled={closed}
+                                    className="h-11 rounded-xl"
+                                    onClick={() => void reopenLoading()}
                                 >
-                                    {camera.active ? <CameraOff /> : <Camera />}
+                                    Reopen to keep loading
                                 </Button>
                             )}
-                        </div>
+                        </section>
+                    )}
 
-                        <div
-                            className={cn(
-                                'overflow-hidden rounded-xl bg-black',
-                                !camera.active && 'hidden',
-                            )}
-                        >
-                            <video
-                                ref={videoRef}
-                                className="aspect-video w-full object-cover"
-                                muted
-                                playsInline
-                            />
-                        </div>
+                    <section className="mx-auto grid max-w-4xl gap-8 rounded-3xl border bg-card p-6 shadow-xs lg:grid-cols-2 lg:items-center">
+                        <div className="flex flex-col gap-4">
+                            <div className="w-full space-y-3">
+                                <label
+                                    htmlFor="barcode"
+                                    className="block text-center text-sm font-medium text-muted-foreground"
+                                >
+                                    Scan item ID
+                                </label>
 
-                        {camera.error && <AlertError errors={[camera.error]} />}
-                    </div>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="barcode"
+                                        ref={inputRef}
+                                        value={scanner.barcode}
+                                        onChange={(event) =>
+                                            scanner.setBarcode(
+                                                event.target.value,
+                                            )
+                                        }
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                scanner.scan(scanner.barcode);
+                                            }
+                                        }}
+                                        placeholder="Barcode"
+                                        inputMode={keyboard ? 'text' : 'none'}
+                                        autoComplete="off"
+                                        autoCapitalize="characters"
+                                        disabled={busy || closed}
+                                        className="h-16 rounded-xl text-center text-2xl"
+                                    />
 
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        onClick={() => void scanner.simulate()}
-                        disabled={busy || closed}
-                    >
-                        {scanner.simulating
-                            ? 'Simulating…'
-                            : 'Simulate seeded scan'}
-                    </Button>
-                </div>
+                                    <Button
+                                        type="button"
+                                        variant={
+                                            keyboard ? 'default' : 'outline'
+                                        }
+                                        size="icon"
+                                        aria-label="Toggle on-screen keyboard"
+                                        aria-pressed={keyboard}
+                                        className="size-16 shrink-0 rounded-xl"
+                                        onClick={() => {
+                                            setKeyboard((value) => !value);
+                                            inputRef.current?.focus();
+                                        }}
+                                    >
+                                        <Keyboard className="size-6" />
+                                    </Button>
+                                </div>
 
-                <div className="flex flex-col items-center gap-6 border-t pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
-                    <ScanFeedback
-                        result={scanner.result}
-                        error={scanner.error}
-                        scanning={busy}
-                    />
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        size="xl"
+                                        className="flex-1"
+                                        onClick={() =>
+                                            scanner.scan(scanner.barcode)
+                                        }
+                                        disabled={
+                                            !scanner.barcode.trim() ||
+                                            busy ||
+                                            closed
+                                        }
+                                    >
+                                        {scanner.scanning ? 'Loading…' : 'Load'}
+                                    </Button>
 
-                    <div className="w-full space-y-2">
-                        <div className="flex items-baseline justify-between">
-                            <span className="text-sm text-muted-foreground">
-                                Loaded on this manifest
-                            </span>
-                            <span className="text-xl font-bold tabular-nums">
-                                {progress
-                                    ? `${progress.loaded_count} / ${progress.total_count}`
-                                    : manifest.manifest_items_count}
-                            </span>
-                        </div>
+                                    {camera.supported && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="xl"
+                                            aria-label={
+                                                camera.active
+                                                    ? 'Stop camera'
+                                                    : 'Scan with camera'
+                                            }
+                                            onClick={() =>
+                                                camera.active
+                                                    ? camera.stop()
+                                                    : void camera.start()
+                                            }
+                                            disabled={closed}
+                                        >
+                                            {camera.active ? (
+                                                <CameraOff />
+                                            ) : (
+                                                <Camera />
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
 
-                        {progress && progress.total_count > 0 && (
-                            <div
-                                className="h-3 overflow-hidden rounded-full bg-muted"
-                                role="progressbar"
-                                aria-valuemin={0}
-                                aria-valuemax={progress.total_count}
-                                aria-valuenow={progress.loaded_count}
-                            >
                                 <div
-                                    className="h-full rounded-full bg-success transition-all"
-                                    style={{
-                                        width: `${(progress.loaded_count / progress.total_count) * 100}%`,
-                                    }}
-                                />
+                                    className={cn(
+                                        'overflow-hidden rounded-xl bg-black',
+                                        !camera.active && 'hidden',
+                                    )}
+                                >
+                                    <video
+                                        ref={videoRef}
+                                        className="aspect-video w-full object-cover"
+                                        muted
+                                        playsInline
+                                    />
+                                </div>
+
+                                {camera.error && (
+                                    <AlertError errors={[camera.error]} />
+                                )}
                             </div>
-                        )}
-                    </div>
+
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground"
+                                onClick={() => void scanner.simulate()}
+                                disabled={busy || closed}
+                            >
+                                {scanner.simulating
+                                    ? 'Simulating…'
+                                    : 'Simulate seeded scan'}
+                            </Button>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-6 border-t pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+                            <ScanFeedback
+                                result={scanner.result}
+                                error={scanner.error}
+                                scanning={busy}
+                            />
+
+                            <div className="w-full space-y-2">
+                                <div className="flex items-baseline justify-between">
+                                    <span className="text-sm text-muted-foreground">
+                                        Loaded on this manifest
+                                    </span>
+                                    <span className="text-xl font-bold tabular-nums">
+                                        {progress
+                                            ? `${progress.loaded_count} / ${progress.total_count}`
+                                            : manifest.manifest_items_count}
+                                    </span>
+                                </div>
+
+                                {progress && progress.total_count > 0 && (
+                                    <div
+                                        className="h-3 overflow-hidden rounded-full bg-muted"
+                                        role="progressbar"
+                                        aria-valuemin={0}
+                                        aria-valuemax={progress.total_count}
+                                        aria-valuenow={progress.loaded_count}
+                                    >
+                                        <div
+                                            className="h-full rounded-full bg-success transition-all"
+                                            style={{
+                                                width: `${(progress.loaded_count / progress.total_count) * 100}%`,
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </section>
                 </div>
-            </section>
+            </div>
+
+            <EquipmentDialog
+                open={equipmentOpen}
+                onOpenChange={setEquipmentOpen}
+                items={equipmentItems}
+                counts={counts}
+                onAdjust={(key, delta) => void adjust(key, delta)}
+            />
 
             <FinishDialog
                 open={finishOpen}
