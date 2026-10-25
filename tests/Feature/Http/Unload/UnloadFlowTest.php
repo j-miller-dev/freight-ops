@@ -568,3 +568,73 @@ it('shows the consignment progress when a pallet is scanned, before it is confir
         ->assertOk()
         ->assertJsonPath('data.progress', ['item_count' => 3, 'in_bay' => 1, 'held' => 0, 'all_placed' => false]);
 });
+
+it('records a queued drop where the runner put the pallet when the rules have moved on', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination'], 'Harbourline Hardware');
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware']);
+
+    // The runner was shown SYD02 and dropped it there while offline; the sender
+    // has since been given a holding rule.
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $yard['bay']) + ['queued' => true])
+        ->assertOk()
+        ->assertJsonPath('data.bay.code', 'SYD02');
+
+    expect($pallet->refresh()->current_location_id)->toBe($yard['bay']->getKey())
+        ->and($pallet->current_status)->toBe(HandlingUnitStatus::Staged);
+
+    $event = OperationalEvent::query()->sole();
+    expect($event->metadata['to_location_code'])->toBe('SYD02')
+        ->and($event->metadata['override_reason'])->toBe('offline_stale_direction')
+        ->and($event->metadata['suggested_location_code'])->toBe('HOLD1');
+});
+
+it('is idempotent when a queued drop is replayed', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination'], 'Harbourline Hardware');
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware']);
+    $payload = dropPayload($pallet, $yard['bay']) + ['queued' => true];
+
+    $this->actingAs(User::factory()->create());
+    $this->postJson(route('unload.confirm'), $payload)->assertOk();
+    $this->postJson(route('unload.confirm'), $payload)->assertOk();
+
+    expect(OperationalEvent::query()->count())->toBe(1);
+});
+
+it('does not mark a queued drop as an override when the rules still agree', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination']);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $yard['bay']) + ['queued' => true])
+        ->assertOk();
+
+    expect(OperationalEvent::query()->sole()->metadata)->not->toHaveKey('override_reason');
+});
+
+it('still refuses a queued drop in a location that is not an active bay or lane', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination'], 'Harbourline Hardware');
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware']);
+    $yard['bay']->forceFill(['is_active' => false])->save();
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $yard['bay']) + ['queued' => true])
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'direction_changed');
+
+    expect($pallet->refresh()->current_location_id)->toBeNull();
+});
+
+it('does not trust the location of a drop that was not queued', function () {
+    $yard = unloadYard();
+    $pallet = unloadPallet($yard['destination'], 'Harbourline Hardware');
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware']);
+
+    $this->actingAs(User::factory()->create())
+        ->postJson(route('unload.confirm'), dropPayload($pallet, $yard['bay']) + ['queued' => false])
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'direction_changed');
+});

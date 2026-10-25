@@ -4,10 +4,20 @@ import { isAuthFailure, notifyAuthExpired, xsrfToken } from '@/lib/session';
 
 export type OutboxStatus = 'pending' | 'syncing' | 'synced' | 'failed';
 
+/** What an entry does when it is sent. Entries saved before kinds existed are scans. */
+export type OutboxKind = 'scan' | 'unload_confirm';
+
 export interface OutboxEntry {
     id?: number;
+    kind?: OutboxKind;
     client_event_id: string;
-    manifest_id: string;
+    // The manifest a scan loads onto; unused by other kinds.
+    manifest_id?: string;
+    // The bay or lane a runner dropped a pallet in.
+    location_id?: string;
+    // Set when the confirm was made offline, so the server records the pallet
+    // where it was physically put.
+    queued?: boolean;
     barcode: string;
     occurred_at: string;
     acknowledged_warnings: string[];
@@ -32,6 +42,18 @@ class OutboxDb extends Dexie {
         this.version(1).stores({
             outbox: '++id, client_event_id, manifest_id, status, created_at',
         });
+        this.version(2)
+            .stores({
+                outbox: '++id, client_event_id, manifest_id, kind, status, created_at',
+            })
+            .upgrade((tx) =>
+                tx
+                    .table('outbox')
+                    .toCollection()
+                    .modify((entry: OutboxEntry) => {
+                        entry.kind ??= 'scan';
+                    }),
+            );
     }
 }
 
@@ -49,9 +71,16 @@ export function isOwnedBy(entry: OutboxEntry, userId?: number): boolean {
     );
 }
 
+export const kindOf = (entry: OutboxEntry): OutboxKind => entry.kind ?? 'scan';
+
+/**
+ * Sends what is waiting for this user, oldest first. Each kind of entry is
+ * flushed by the screen that knows how to show its result.
+ */
 export async function flushOutbox(
     callbacks: FlushCallbacks,
     userId?: number,
+    kind: OutboxKind = 'scan',
 ): Promise<void> {
     if (flushing) {
         return;
@@ -65,11 +94,15 @@ export async function flushOutbox(
             .anyOf('pending', 'syncing')
             .sortBy('created_at');
 
-        for (const entry of pending.filter((e) => isOwnedBy(e, userId))) {
+        const mine = pending.filter(
+            (e) => isOwnedBy(e, userId) && kindOf(e) === kind,
+        );
+
+        for (const entry of mine) {
             await db.outbox.update(entry.id!, { status: 'syncing' });
 
             try {
-                const response = await postScan(entry);
+                const response = await postEntry(entry);
 
                 // The session ended. Keep the scan exactly as it was (no retry
                 // is spent), stop, and let the app ask the user to sign back in.
@@ -99,8 +132,16 @@ export async function flushOutbox(
                     callbacks.onError(entry, message);
                 }
             } catch {
-                await handleFlushError(entry);
+                // No connection is not the entry's fault. Keep it exactly as it
+                // was, without spending a retry, and stop: the rest would fail
+                // the same way. It goes out when the connection is back.
+                await db.outbox.update(entry.id!, {
+                    status: 'pending',
+                    queued: true,
+                });
                 callbacks.onError(entry, 'Network error');
+
+                return;
             }
         }
     } finally {
@@ -116,23 +157,42 @@ async function handleFlushError(entry: OutboxEntry): Promise<void> {
     });
 }
 
-function postScan(entry: OutboxEntry): Promise<Response> {
+function postEntry(entry: OutboxEntry): Promise<Response> {
     const token = xsrfToken();
+    const confirm = kindOf(entry) === 'unload_confirm';
 
-    return fetch(`/loading/manifests/${entry.manifest_id}/scan`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+    return fetch(
+        confirm
+            ? '/unload/confirm'
+            : `/loading/manifests/${entry.manifest_id}/scan`,
+        {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+            },
+            body: JSON.stringify(
+                confirm
+                    ? {
+                          barcode: entry.barcode,
+                          location_id: entry.location_id,
+                          client_event_id: entry.client_event_id,
+                          occurred_at: entry.occurred_at,
+                          // Anything that has already been tried once is a
+                          // replay: the pallet is down, wherever it was put.
+                          queued:
+                              entry.queued === true || entry.retry_count > 0,
+                      }
+                    : {
+                          barcode: entry.barcode,
+                          client_event_id: entry.client_event_id,
+                          occurred_at: entry.occurred_at,
+                          acknowledged_warnings: entry.acknowledged_warnings,
+                      },
+            ),
         },
-        body: JSON.stringify({
-            barcode: entry.barcode,
-            client_event_id: entry.client_event_id,
-            occurred_at: entry.occurred_at,
-            acknowledged_warnings: entry.acknowledged_warnings,
-        }),
-    });
+    );
 }

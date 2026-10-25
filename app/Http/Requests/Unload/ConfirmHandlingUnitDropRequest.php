@@ -22,6 +22,9 @@ class ConfirmHandlingUnitDropRequest extends FormRequest
             'location_id' => ['required', 'uuid'],
             'client_event_id' => ['required', 'uuid'],
             'occurred_at' => ['required', 'date'],
+            // Set when the confirm waited in the device's offline queue: the
+            // pallet is already down, so where it was put is the truth.
+            'queued' => ['sometimes', 'boolean'],
         ];
     }
 }

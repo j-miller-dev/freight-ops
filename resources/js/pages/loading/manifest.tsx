@@ -9,7 +9,6 @@ import {
     Lock,
     Truck,
     TriangleAlert,
-    WifiOff,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -27,6 +26,7 @@ import TrailerAlerts, {
 import TrailerDialog from '@/components/loading/trailer-dialog';
 import TrailerMapDialog from '@/components/loading/trailer-map-dialog';
 import WarningDialog from '@/components/loading/warning-dialog';
+import OutboxBanners from '@/components/outbox-banners';
 import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -346,25 +346,7 @@ export default function LoadingManifest({
                 </ActionRail>
                 <div className="min-w-0 flex-1">
                     <div className="mb-4 space-y-2 empty:hidden">
-                        {!outbox.isOnline && (
-                            <p className="flex items-center gap-2 rounded-xl bg-warning px-4 py-3 font-medium text-warning-foreground">
-                                <WifiOff className="size-5" /> Offline — scans
-                                are saving on this device.
-                            </p>
-                        )}
-                        {outbox.pendingCount > 0 && (
-                            <p className="rounded-xl bg-warning/30 px-4 py-3 font-medium">
-                                {outbox.pendingCount}{' '}
-                                {outbox.pendingCount === 1 ? 'scan' : 'scans'}{' '}
-                                waiting to sync.
-                            </p>
-                        )}
-                        {outbox.hasFailed && (
-                            <p className="rounded-xl bg-destructive px-4 py-3 font-medium text-white">
-                                Some scans could not be delivered. Tell a
-                                supervisor.
-                            </p>
-                        )}
+                        <OutboxBanners outbox={outbox} noun="scan" />
                         {status !== 'open' && (
                             <p className="rounded-xl bg-muted px-4 py-3 font-medium">
                                 This manifest is closed

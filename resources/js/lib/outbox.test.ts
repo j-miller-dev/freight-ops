@@ -104,7 +104,7 @@ describe('flushOutbox', () => {
         expect(callbacks.onSynced).not.toHaveBeenCalled();
     });
 
-    it('increments retry_count and keeps entry pending on network error', async () => {
+    it('keeps an entry pending without spending a retry on a network error', async () => {
         await db.outbox.add(makeEntry());
         vi.stubGlobal(
             'fetch',
@@ -116,19 +116,48 @@ describe('flushOutbox', () => {
 
         const entries = await db.outbox.toArray();
         expect(entries[0].status).toBe('pending');
-        expect(entries[0].retry_count).toBe(1);
+        expect(entries[0].retry_count).toBe(0);
+        expect(entries[0].queued).toBe(true);
         expect(callbacks.onError).toHaveBeenCalledWith(
             expect.anything(),
             'Network error',
         );
     });
 
-    it('marks entry failed after MAX_RETRIES network errors', async () => {
-        await db.outbox.add(makeEntry({ retry_count: MAX_RETRIES - 1 }));
+    it('never gives up on an entry because the connection is down', async () => {
+        await db.outbox.add(makeEntry());
         vi.stubGlobal(
             'fetch',
             vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
         );
+
+        for (let attempt = 0; attempt < MAX_RETRIES + 3; attempt++) {
+            await flushOutbox(makeCallbacks());
+        }
+
+        const entries = await db.outbox.toArray();
+        expect(entries[0].status).toBe('pending');
+        expect(entries[0].retry_count).toBe(0);
+    });
+
+    it('stops at the first network error so the rest wait their turn', async () => {
+        await db.outbox.add(makeEntry({ client_event_id: 'a', created_at: 1 }));
+        await db.outbox.add(makeEntry({ client_event_id: 'b', created_at: 2 }));
+        const fetchMock = vi
+            .fn()
+            .mockRejectedValue(new TypeError('Failed to fetch'));
+        vi.stubGlobal('fetch', fetchMock);
+
+        await flushOutbox(makeCallbacks());
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const entries = await db.outbox.orderBy('created_at').toArray();
+        expect(entries.map((e) => e.status)).toEqual(['pending', 'pending']);
+    });
+
+    it('increments retry_count on a server error and fails after MAX_RETRIES', async () => {
+        await db.outbox.add(makeEntry({ retry_count: MAX_RETRIES - 1 }));
+        mockFetch(500, { error: { message: 'Server error' } });
 
         const callbacks = makeCallbacks();
         await flushOutbox(callbacks);
@@ -136,6 +165,10 @@ describe('flushOutbox', () => {
         const entries = await db.outbox.toArray();
         expect(entries[0].status).toBe('failed');
         expect(entries[0].retry_count).toBe(MAX_RETRIES);
+        expect(callbacks.onError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Server error',
+        );
     });
 
     it('preserves occurred_at through the outbox without mutation', async () => {
@@ -249,5 +282,109 @@ describe('flushOutbox on a shared device', () => {
         );
         expect(byId).toEqual({ mine: 'synced', theirs: 'pending' });
         expect(fetch).toHaveBeenCalledOnce();
+    });
+});
+
+describe('flushOutbox with runner drop-offs', () => {
+    const drop = (overrides: Partial<OutboxEntry> = {}) =>
+        makeEntry({
+            kind: 'unload_confirm',
+            manifest_id: undefined,
+            location_id: 'bay-uuid',
+            client_event_id: '00000000-0000-4000-8000-0000000000d1',
+            ...overrides,
+        });
+
+    it('posts a drop to the confirm endpoint with where it was put', async () => {
+        await db.outbox.add(drop());
+        mockFetch(200, { data: { progress: {} } });
+
+        const callbacks = makeCallbacks();
+        await flushOutbox(callbacks, undefined, 'unload_confirm');
+
+        const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock
+            .calls[0] as [string, RequestInit];
+        expect(url).toBe('/unload/confirm');
+        expect(JSON.parse(init.body as string)).toMatchObject({
+            barcode: 'BARCODE-001',
+            location_id: 'bay-uuid',
+            queued: false,
+        });
+        expect(callbacks.onSynced).toHaveBeenCalledOnce();
+    });
+
+    it('marks a drop as queued when it was made offline', async () => {
+        await db.outbox.add(drop({ queued: true }));
+        mockFetch(200, { data: {} });
+
+        await flushOutbox(makeCallbacks(), undefined, 'unload_confirm');
+
+        const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+            string,
+            RequestInit,
+        ];
+        expect(JSON.parse(init.body as string).queued).toBe(true);
+    });
+
+    it('marks a drop as queued once it has been tried and failed', async () => {
+        await db.outbox.add(drop({ retry_count: 1 }));
+        mockFetch(200, { data: {} });
+
+        await flushOutbox(makeCallbacks(), undefined, 'unload_confirm');
+
+        const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+            string,
+            RequestInit,
+        ];
+        expect(JSON.parse(init.body as string).queued).toBe(true);
+    });
+
+    it('reports a drop the server could not record as a warning', async () => {
+        await db.outbox.add(drop());
+        mockFetch(409, {
+            error: {
+                code: 'handling_unit_already_loaded',
+                message: 'On a trailer',
+            },
+        });
+
+        const callbacks = makeCallbacks();
+        await flushOutbox(callbacks, undefined, 'unload_confirm');
+
+        expect(callbacks.onWarning).toHaveBeenCalledWith(
+            expect.anything(),
+            'handling_unit_already_loaded',
+            expect.anything(),
+        );
+    });
+
+    it('only sends the kind it was asked to flush', async () => {
+        await db.outbox.add(makeEntry({ client_event_id: 'scan-1' }));
+        await db.outbox.add(drop());
+        mockFetch(200, { data: {} });
+
+        await flushOutbox(makeCallbacks(), undefined, 'unload_confirm');
+
+        const urls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map(
+            (call) => call[0],
+        );
+        expect(urls).toEqual(['/unload/confirm']);
+
+        const scan = await db.outbox
+            .where('client_event_id')
+            .equals('scan-1')
+            .first();
+        expect(scan?.status).toBe('pending');
+    });
+
+    it('treats an entry saved before kinds existed as a scan', async () => {
+        await db.outbox.add(makeEntry({ kind: undefined }));
+        mockFetch(201, { data: {} });
+
+        await flushOutbox(makeCallbacks());
+
+        expect((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
+            '/loading/manifests/manifest-uuid/scan',
+        );
     });
 });
