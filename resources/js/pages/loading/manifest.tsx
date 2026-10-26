@@ -6,6 +6,7 @@ import {
     CircleCheck,
     Keyboard,
     ListChecks,
+    ListOrdered,
     Lock,
     Truck,
     TriangleAlert,
@@ -19,6 +20,7 @@ import ConsignmentSheet from '@/components/loading/consignment-sheet';
 import DepartureBadge from '@/components/loading/departure-badge';
 import EquipmentDialog from '@/components/loading/equipment-dialog';
 import FinishDialog from '@/components/loading/finish-dialog';
+import NextUpSheet from '@/components/loading/next-up-sheet';
 import ScanFeedback from '@/components/loading/scan-feedback';
 import TrailerAlerts, {
     ClashBanner,
@@ -91,6 +93,7 @@ export default function LoadingManifest({
     const [trailer, setTrailer] = useState(manifest.trailer_type);
     const [trailerOpen, setTrailerOpen] = useState(false);
     const [consignmentsOpen, setConsignmentsOpen] = useState(false);
+    const [nextUpOpen, setNextUpOpen] = useState(false);
     const { summary, refresh } = useManifestSummary(
         manifest.id,
         initialSummary,
@@ -303,6 +306,12 @@ export default function LoadingManifest({
                         label="Consignments"
                         badge={`${summary.consignments_complete}/${summary.consignments_total}`}
                         onClick={() => setConsignmentsOpen(true)}
+                    />
+                    <RailButton
+                        icon={ListOrdered}
+                        label="Next up"
+                        onClick={() => setNextUpOpen(true)}
+                        disabled={closed}
                     />
                     <RailButton
                         icon={Truck}
@@ -601,6 +610,13 @@ export default function LoadingManifest({
                 onActiveChange={setActiveId}
                 onPlace={placeItem}
                 justLoaded={autoOpen ? justLoaded : null}
+            />
+
+            <NextUpSheet
+                manifestId={manifest.id}
+                manifestNumber={manifest.manifest_number}
+                open={nextUpOpen}
+                onOpenChange={setNextUpOpen}
             />
 
             <ConsignmentSheet

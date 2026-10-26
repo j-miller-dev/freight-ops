@@ -7,6 +7,7 @@ use App\Http\Controllers\Loading\CloseManifestController;
 use App\Http\Controllers\Loading\FinishManifestLoadingController;
 use App\Http\Controllers\Loading\ListAvailableManifestsController;
 use App\Http\Controllers\Loading\ListManifestConsignmentsController;
+use App\Http\Controllers\Loading\ListNextUpController;
 use App\Http\Controllers\Loading\LoadHandlingUnitController;
 use App\Http\Controllers\Loading\LoadingController;
 use App\Http\Controllers\Loading\ManifestSummaryController;
@@ -81,6 +82,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('loading/manifests/{manifest}/consignments', ListManifestConsignmentsController::class)
         ->name('loading.manifest.consignments');
+
+    Route::get('loading/manifests/{manifest}/next-up', ListNextUpController::class)
+        ->name('loading.manifest.next-up');
 
     Route::get('loading/manifests/{manifest}/consignments/{consignment}', ShowManifestConsignmentController::class)
         ->name('loading.manifest.consignment');

@@ -117,3 +117,35 @@ export type EquipmentCounts = Record<string, number>;
 export type FinishedState = { at: string; by: string | null } | null;
 
 export type ClosedState = { at: string | null; by: string | null } | null;
+
+export type PriorityTier = 'P1' | 'P2' | 'P3' | 'P4';
+
+// One consignment with freight ready to load, and why it ranks where it does.
+export type NextUpRow = {
+    id: string;
+    connote_number: string;
+    sender_name: string | null;
+    service_code: string | null;
+    item_count: number;
+    // Pieces ready in the bay now, and pieces already on this trailer.
+    ready: number;
+    on_trailer: number;
+    dg_classes: string[];
+    has_food: boolean;
+    score: number;
+    tier: PriorityTier;
+    reasons: string[];
+    waiting_minutes: number;
+};
+
+export type NextUpList = {
+    data: NextUpRow[];
+    meta: {
+        bay_code: string | null;
+        total: number;
+        shown: number;
+        // Held back or in a holding lane: deliberately not loadable.
+        held_count: number;
+        departs_at: string | null;
+    };
+};
