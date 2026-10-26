@@ -81,6 +81,8 @@ export async function flushOutbox(
     callbacks: FlushCallbacks,
     userId?: number,
     kind: OutboxKind = 'scan',
+    // Narrows the flush to entries this screen can show a result for.
+    match: (entry: OutboxEntry) => boolean = () => true,
 ): Promise<void> {
     if (flushing) {
         return;
@@ -95,7 +97,7 @@ export async function flushOutbox(
             .sortBy('created_at');
 
         const mine = pending.filter(
-            (e) => isOwnedBy(e, userId) && kindOf(e) === kind,
+            (e) => isOwnedBy(e, userId) && kindOf(e) === kind && match(e),
         );
 
         for (const entry of mine) {

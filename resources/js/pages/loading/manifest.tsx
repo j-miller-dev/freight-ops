@@ -346,7 +346,6 @@ export default function LoadingManifest({
                 </ActionRail>
                 <div className="min-w-0 flex-1">
                     <div className="mb-4 space-y-2 empty:hidden">
-                        <OutboxBanners outbox={outbox} noun="scan" />
                         {status !== 'open' && (
                             <p className="rounded-xl bg-muted px-4 py-3 font-medium">
                                 This manifest is closed
@@ -564,6 +563,12 @@ export default function LoadingManifest({
                         </div>
                     </section>
                 </div>
+            </div>
+
+            {/* Below the scan card, so a banner appearing never moves the
+                button the loader is about to tap. */}
+            <div className="mt-4 space-y-2 empty:hidden">
+                <OutboxBanners outbox={outbox} noun="scan" />
             </div>
 
             <EquipmentDialog

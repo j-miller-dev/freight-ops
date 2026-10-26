@@ -8,6 +8,7 @@ import {
     manifestItemsFor,
     openManifestId,
     removeHoldingRule,
+    twoOpenManifestIds,
 } from './db';
 
 const MOVES = ['staged', 'moved'];
@@ -48,6 +49,39 @@ async function queued(page: Page): Promise<string[]> {
                         );
                 };
             }),
+    );
+}
+
+/** Leave a scan in the device's queue, as if it had been made offline earlier. */
+async function leaveQueuedScan(
+    page: Page,
+    manifestId: string,
+    barcode: string,
+): Promise<void> {
+    await page.evaluate(
+        ({ manifestId, barcode }) =>
+            new Promise<void>((resolve, reject) => {
+                const open = indexedDB.open('freight-ops-outbox');
+
+                open.onsuccess = () => {
+                    const tx = open.result.transaction('outbox', 'readwrite');
+
+                    tx.objectStore('outbox').add({
+                        kind: 'scan',
+                        client_event_id: crypto.randomUUID(),
+                        manifest_id: manifestId,
+                        barcode,
+                        occurred_at: new Date().toISOString(),
+                        acknowledged_warnings: [],
+                        status: 'pending',
+                        retry_count: 0,
+                        created_at: Date.now(),
+                    });
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                };
+            }),
+        { manifestId, barcode },
     );
 }
 
@@ -169,5 +203,58 @@ test.describe('loader scans', () => {
         await expect(page.getByText('waiting to sync')).toBeHidden();
         expect(manifestItemsFor(barcode)).toBe(1);
         expect(eventsFor(barcode, ['loaded'])).toBe(1);
+    });
+});
+
+test.describe('a queue left from an earlier visit', () => {
+    test('is sent when the manifest page opens', async ({ page }) => {
+        const [manifestId] = twoOpenManifestIds();
+        const { barcode } = cleanPallet();
+
+        await page.goto(`/loading/manifests/${manifestId}`);
+        await expect(page.getByPlaceholder('Barcode')).toBeVisible();
+
+        await leaveQueuedScan(page, manifestId, barcode);
+        expect(manifestItemsFor(barcode)).toBe(0);
+
+        await page.reload();
+
+        await expect.poll(() => manifestItemsFor(barcode)).toBe(1);
+        await expect(page.getByText('waiting to sync')).toBeHidden();
+    });
+
+    test('leaves scans for another manifest alone', async ({ page }) => {
+        const [manifestId, otherId] = twoOpenManifestIds();
+        const { barcode } = cleanPallet();
+
+        await page.goto(`/loading/manifests/${manifestId}`);
+        await expect(page.getByPlaceholder('Barcode')).toBeVisible();
+
+        await leaveQueuedScan(page, otherId, barcode);
+        await page.reload();
+        await expect(page.getByPlaceholder('Barcode')).toBeVisible();
+
+        // Nothing here can show that scan's result, so it stays queued and
+        // does not claim to be waiting on this manifest.
+        await expect.poll(() => queued(page)).toEqual(['pending/0']);
+        await expect(page.getByText('waiting to sync')).toBeHidden();
+        expect(manifestItemsFor(barcode)).toBe(0);
+    });
+});
+
+test.describe('the screen', () => {
+    test('does not move the Confirm button when the signal drops', async ({
+        page,
+        context,
+    }) => {
+        const { barcode } = cleanPallet();
+        await directedToBay(page, barcode);
+
+        const before = await confirmButton(page).boundingBox();
+        await context.setOffline(true);
+        await expect(page.getByText('Offline —')).toBeVisible();
+        const after = await confirmButton(page).boundingBox();
+
+        expect(after).toEqual(before);
     });
 });

@@ -22,9 +22,13 @@ export interface OutboxState {
 // How often something waiting in the queue is tried again while online.
 const RETRY_MS = 15_000;
 
-async function readCounts(userId: number, kind: OutboxKind) {
+async function readCounts(
+    userId: number,
+    kind: OutboxKind,
+    match: (entry: OutboxEntry) => boolean,
+) {
     const mine = (entry: OutboxEntry) =>
-        isOwnedBy(entry, userId) && kindOf(entry) === kind;
+        isOwnedBy(entry, userId) && kindOf(entry) === kind && match(entry);
 
     const pending = await db.outbox
         .where('status')
@@ -43,11 +47,14 @@ async function readCounts(userId: number, kind: OutboxKind) {
 /**
  * The device's queue for one kind of entry. `background` says what to do with
  * a result when it arrives with nobody tapping anything (back online, or an
- * entry left from an earlier visit), so the queue drains on its own.
+ * entry left from an earlier visit), so the queue drains on its own. `match`
+ * limits the queue to what this screen can show a result for, e.g. the scans
+ * for the manifest that is open.
  */
 export function useOutbox(
     kind: OutboxKind = 'scan',
     background?: FlushCallbacks,
+    match: (entry: OutboxEntry) => boolean = () => true,
 ): OutboxState {
     const userId = usePage().props.auth.user.id;
     const [isOnline, setIsOnline] = useState(() => navigator.onLine);
@@ -56,14 +63,22 @@ export function useOutbox(
     const callbacksRef = useRef<FlushCallbacks | null>(background ?? null);
 
     // The latest handlers, so a late result reaches the screen as it is now.
+    const matchRef = useRef(match);
+
     useEffect(() => {
+        matchRef.current = match;
+
         if (background) {
             callbacksRef.current = background;
         }
     });
 
     const refreshCounts = useCallback(async () => {
-        const { pending, failed } = await readCounts(userId, kind);
+        const { pending, failed } = await readCounts(
+            userId,
+            kind,
+            matchRef.current,
+        );
         setPendingCount(pending);
         setHasFailed(failed > 0);
     }, [userId, kind]);
@@ -71,20 +86,25 @@ export function useOutbox(
     useEffect(() => {
         let active = true;
 
-        void readCounts(userId, kind).then(({ pending, failed }) => {
-            if (!active) {
-                return;
-            }
+        void readCounts(userId, kind, matchRef.current).then(
+            ({ pending, failed }) => {
+                if (!active) {
+                    return;
+                }
 
-            setPendingCount(pending);
-            setHasFailed(failed > 0);
-        });
+                setPendingCount(pending);
+                setHasFailed(failed > 0);
+            },
+        );
 
         const flush = () => {
             if (callbacksRef.current) {
-                void flushOutbox(callbacksRef.current, userId, kind).then(
-                    refreshCounts,
-                );
+                void flushOutbox(
+                    callbacksRef.current,
+                    userId,
+                    kind,
+                    matchRef.current,
+                ).then(refreshCounts);
             }
         };
 
@@ -140,7 +160,7 @@ export function useOutbox(
             await refreshCounts();
 
             if (navigator.onLine) {
-                await flushOutbox(callbacks, userId, kind);
+                await flushOutbox(callbacks, userId, kind, matchRef.current);
                 await refreshCounts();
             }
         },

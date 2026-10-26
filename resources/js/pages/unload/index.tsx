@@ -75,35 +75,6 @@ export default function Unload() {
                 actions={<WarehouseMapDialog />}
             />
 
-            <div className="mx-auto mb-4 w-full max-w-xl space-y-2 empty:hidden">
-                <OutboxBanners outbox={runner.outbox} noun="drop" />
-                {runner.problems.length > 0 && (
-                    <div
-                        role="alert"
-                        className="space-y-1 rounded-xl bg-destructive px-4 py-3 text-white"
-                    >
-                        <p className="font-medium">
-                            These drops could not be recorded. Tell a
-                            supervisor:
-                        </p>
-                        {runner.problems.map((problem) => (
-                            <p key={problem} className="text-sm">
-                                {problem}
-                            </p>
-                        ))}
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-1 text-foreground"
-                            onClick={runner.dismissProblems}
-                        >
-                            Dismiss
-                        </Button>
-                    </div>
-                )}
-            </div>
-
             {stage === 'idle' && (
                 <section className="mx-auto w-full max-w-xl space-y-3 rounded-3xl border bg-card p-6 shadow-xs">
                     <div className="flex flex-col items-center gap-2 py-2 text-muted-foreground">
@@ -439,6 +410,37 @@ export default function Unload() {
                     </Button>
                 </section>
             )}
+
+            {/* Below the card, so a banner appearing never moves what the
+                runner is about to tap. */}
+            <div className="mx-auto mt-4 w-full max-w-xl space-y-2 empty:hidden">
+                <OutboxBanners outbox={runner.outbox} noun="drop" />
+                {runner.problems.length > 0 && (
+                    <div
+                        role="alert"
+                        className="space-y-1 rounded-xl bg-destructive px-4 py-3 text-white"
+                    >
+                        <p className="font-medium">
+                            These drops could not be recorded. Tell a
+                            supervisor:
+                        </p>
+                        {runner.problems.map((problem) => (
+                            <p key={problem} className="text-sm">
+                                {problem}
+                            </p>
+                        ))}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-1 text-foreground"
+                            onClick={runner.dismissProblems}
+                        >
+                            Dismiss
+                        </Button>
+                    </div>
+                )}
+            </div>
         </>
     );
 }
