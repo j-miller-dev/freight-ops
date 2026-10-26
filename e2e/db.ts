@@ -32,7 +32,7 @@ export function php<T>(code: string): T {
  * unplaced, not on any manifest, from a sender with no holding rule, bound for
  * Sydney, so scanning it raises no warnings.
  */
-export function cleanPallet(): { barcode: string; sender: string } {
+export function cleanPallet(skip = 0): { barcode: string; sender: string } {
     return php<{ barcode: string; sender: string }>(`
         $unit = App\\Models\\HandlingUnit::query()
             ->with('consignment')
@@ -41,6 +41,7 @@ export function cleanPallet(): { barcode: string; sender: string } {
             ->whereNull('current_location_id')
             ->doesntHave('manifestItem')
             ->orderBy('barcode')
+            ->skip(${skip})
             ->firstOrFail();
 
         return ['barcode' => $unit->barcode, 'sender' => $unit->consignment->sender_name];
@@ -55,6 +56,19 @@ export function openManifestId(): string {
             ->whereNull('loading_finished_at')
             ->orderBy('manifest_number')
             ->value('id');
+    `);
+}
+
+/** Two different open manifests, to show a queue only touches its own. */
+export function twoOpenManifestIds(): [string, string] {
+    return php<[string, string]>(`
+        return App\\Models\\Manifest::query()
+            ->where('status', 'open')
+            ->whereNull('loading_finished_at')
+            ->orderBy('manifest_number')
+            ->limit(2)
+            ->pluck('id')
+            ->all();
     `);
 }
 

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useOutbox } from '@/hooks/use-outbox';
+import type { FlushCallbacks } from '@/hooks/use-outbox';
 
 export type Progress = {
     loaded_count: number;
@@ -75,7 +76,6 @@ type WarningResponse = {
 };
 
 export function useManifestScanner(manifestId: string) {
-    const outbox = useOutbox();
     const busyRef = useRef(false);
 
     const [barcode, setBarcode] = useState('');
@@ -84,6 +84,56 @@ export function useManifestScanner(manifestId: string) {
     const [error, setError] = useState('');
     const [result, setResult] = useState<ScanResult | null>(null);
     const [warning, setWarning] = useState<WarningPrompt | null>(null);
+
+    // What to do when a scan's result arrives, whether from a tap or from the
+    // queue sending it later (back online, or left from an earlier visit).
+    const callbacks: FlushCallbacks = {
+        onSynced(entry, json) {
+            const { data } = json as SyncedResponse;
+
+            setBarcode('');
+            setWarning(null);
+            setResult({
+                handlingUnitId: data.handling_unit_id,
+                barcode: entry.barcode,
+                connoteNumber: data.connote_number,
+                pieceNumber: data.piece_number,
+                dgClass: data.dg_class,
+                unNumber: data.un_number,
+                properShippingName: data.proper_shipping_name,
+                isFood: data.is_food,
+                loader: data.loader?.name,
+                scannedAt: data.loaded_at,
+                progress: data.progress,
+                consignmentProgress: data.consignment_progress,
+            });
+        },
+        onWarning(entry, code, json) {
+            if (!isWarningCode(code)) {
+                return;
+            }
+
+            const { error: detail } = json as WarningResponse;
+
+            setWarning({
+                barcode: entry.barcode,
+                clientEventId: entry.client_event_id,
+                occurredAt: entry.occurred_at,
+                acknowledgedWarnings: entry.acknowledged_warnings,
+                code,
+                message: detail.message ?? 'This scan needs confirmation.',
+                details: detail.details,
+            });
+        },
+        onError(_entry, message) {
+            setError(message);
+        },
+    };
+    const outbox = useOutbox(
+        'scan',
+        callbacks,
+        (entry) => entry.manifest_id === manifestId,
+    );
 
     async function submitScan(scan: PendingScan) {
         if (!scan.barcode) {
@@ -104,50 +154,7 @@ export function useManifestScanner(manifestId: string) {
                     occurred_at: scan.occurredAt,
                     acknowledged_warnings: scan.acknowledgedWarnings,
                 },
-                {
-                    onSynced(entry, json) {
-                        const { data } = json as SyncedResponse;
-
-                        setBarcode('');
-                        setWarning(null);
-                        setResult({
-                            handlingUnitId: data.handling_unit_id,
-                            barcode: entry.barcode,
-                            connoteNumber: data.connote_number,
-                            pieceNumber: data.piece_number,
-                            dgClass: data.dg_class,
-                            unNumber: data.un_number,
-                            properShippingName: data.proper_shipping_name,
-                            isFood: data.is_food,
-                            loader: data.loader?.name,
-                            scannedAt: data.loaded_at,
-                            progress: data.progress,
-                            consignmentProgress: data.consignment_progress,
-                        });
-                    },
-                    onWarning(entry, code, json) {
-                        if (!isWarningCode(code)) {
-                            return;
-                        }
-
-                        const { error: detail } = json as WarningResponse;
-
-                        setWarning({
-                            barcode: entry.barcode,
-                            clientEventId: entry.client_event_id,
-                            occurredAt: entry.occurred_at,
-                            acknowledgedWarnings: entry.acknowledged_warnings,
-                            code,
-                            message:
-                                detail.message ??
-                                'This scan needs confirmation.',
-                            details: detail.details,
-                        });
-                    },
-                    onError(_entry, message) {
-                        setError(message);
-                    },
-                },
+                callbacks,
             );
         } finally {
             setScanning(false);
