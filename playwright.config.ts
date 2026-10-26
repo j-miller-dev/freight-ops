@@ -56,7 +56,9 @@ export default defineConfig({
     ],
     webServer: {
         command: `php artisan serve --host=127.0.0.1 --port=${port} --no-reload`,
-        url: `http://127.0.0.1:${port}/session/ping`,
+        // The health route needs no database: the server starts before the
+        // global setup has migrated one.
+        url: `http://127.0.0.1:${port}/up`,
         env: appEnv,
         reuseExistingServer: !process.env.CI,
         timeout: 60_000,
