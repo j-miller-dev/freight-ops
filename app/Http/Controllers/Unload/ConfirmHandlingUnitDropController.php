@@ -28,8 +28,13 @@ class ConfirmHandlingUnitDropController extends Controller
 
         if ($direction->location->getKey() !== $request->validated('location_id')) {
             // A held pallet may go in another lane when the suggested one is full.
-            // Anything else means the rules moved on: show the new bay first.
+            // A confirm that waited in the offline queue is recorded where the
+            // runner put the pallet. Anything else means the rules moved on:
+            // show the new bay first.
             $direction = $director->withLaneOverride($direction, $request->validated('location_id'))
+                ?? ($request->boolean('queued')
+                    ? $director->physicalDrop($direction, $request->validated('location_id'))
+                    : null)
                 ?? throw new DirectionChanged($direction);
         }
 

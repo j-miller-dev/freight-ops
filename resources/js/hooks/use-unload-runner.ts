@@ -1,4 +1,7 @@
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { useOutbox } from '@/hooks/use-outbox';
+import type { FlushCallbacks } from '@/hooks/use-outbox';
 import { getJson, HttpError, postJson } from '@/lib/http';
 
 export type LaneOption = {
@@ -45,6 +48,10 @@ type Pending = { clientEventId: string; occurredAt: string };
 
 export function useUnloadRunner() {
     const [barcode, setBarcode] = useState('');
+    // The drop is saved on this device and has not reached the server yet.
+    const [queued, setQueued] = useState(false);
+    // Drops that synced later but could not be recorded, for a supervisor.
+    const [problems, setProblems] = useState<string[]>([]);
     const [stage, setStage] = useState<Stage>('idle');
     const [direction, setDirection] = useState<BayDirection | null>(null);
     const [busy, setBusy] = useState(false);
@@ -110,56 +117,92 @@ export function useUnloadRunner() {
         }
     }
 
+    // What to do when a confirm's result arrives. The pallet is already down,
+    // so a result for an earlier pallet must never disturb the current screen.
+    const callbacks: FlushCallbacks = {
+        onSynced(entry, json) {
+            const { data } = json as { data: BayDirection };
+
+            if (entry.client_event_id === pendingRef.current?.clientEventId) {
+                pendingRef.current = null;
+                // Counts now include the pallet just dropped.
+                setDirection((current) =>
+                    current ? { ...current, progress: data.progress } : current,
+                );
+                setQueued(false);
+                setStage('dropped');
+
+                return;
+            }
+
+            toast.success(`Drop of ${entry.barcode} saved.`);
+        },
+        onWarning(entry, code, json) {
+            const message =
+                (json as { error?: { message?: string } }).error?.message ??
+                'The drop could not be recorded.';
+
+            if (entry.client_event_id !== pendingRef.current?.clientEventId) {
+                setProblems((current) => [
+                    ...current,
+                    `${entry.barcode}: ${message}`,
+                ]);
+
+                return;
+            }
+
+            if (code === 'direction_changed') {
+                // The bay changed since the scan: show the new one to confirm.
+                pendingRef.current = null;
+                void lookup(entry.barcode).then(() => setError(message));
+
+                return;
+            }
+
+            pendingRef.current = null;
+            setError(message);
+        },
+        onError() {
+            // No connection: the drop stays queued and goes out by itself.
+        },
+    };
+    const outbox = useOutbox('unload_confirm', callbacks);
+
     async function confirm() {
         if (!direction || busyRef.current) {
             return;
         }
 
-        pendingRef.current ??= {
+        const drop = (pendingRef.current ??= {
             clientEventId: crypto.randomUUID(),
             occurredAt: new Date().toISOString(),
-        };
+        });
 
         busyRef.current = true;
         setBusy(true);
         setError('');
 
         try {
-            const { data } = await postJson<{ data: BayDirection }>(
-                '/unload/confirm',
+            await outbox.submit(
                 {
+                    kind: 'unload_confirm',
+                    client_event_id: drop.clientEventId,
                     barcode: direction.barcode,
                     location_id:
                         override?.location_id ?? direction.bay.location_id,
-                    client_event_id: pendingRef.current.clientEventId,
-                    occurred_at: pendingRef.current.occurredAt,
+                    occurred_at: drop.occurredAt,
+                    acknowledged_warnings: [],
+                    queued: !navigator.onLine,
                 },
+                callbacks,
             );
 
-            pendingRef.current = null;
-            // Counts now include the pallet just dropped.
-            setDirection({ ...direction, progress: data.progress });
-            setStage('dropped');
-        } catch (confirmError) {
-            if (
-                confirmError instanceof HttpError &&
-                confirmError.code === 'direction_changed'
-            ) {
-                // The bay changed since the scan: show the new one to confirm.
-                busyRef.current = false;
-                setBusy(false);
-                pendingRef.current = null;
-                await lookup(direction.barcode);
-                setError(confirmError.message);
-
-                return;
+            // Still waiting after the attempt: no connection. The pallet is
+            // down, so the runner moves on and the queue sends it later.
+            if (pendingRef.current?.clientEventId === drop.clientEventId) {
+                setQueued(true);
+                setStage('dropped');
             }
-
-            setError(
-                confirmError instanceof HttpError
-                    ? confirmError.message
-                    : 'No connection. Tap Confirm again once you are back online.',
-            );
         } finally {
             busyRef.current = false;
             setBusy(false);
@@ -167,7 +210,9 @@ export function useUnloadRunner() {
     }
 
     function reset() {
+        // A drop still waiting to send keeps its place in the queue.
         pendingRef.current = null;
+        setQueued(false);
         setOverride(null);
         setBarcode('');
         setDirection(null);
@@ -185,6 +230,10 @@ export function useUnloadRunner() {
         busy,
         simulating,
         error,
+        queued,
+        problems,
+        dismissProblems: () => setProblems([]),
+        outbox,
         lookup,
         simulate,
         confirm,

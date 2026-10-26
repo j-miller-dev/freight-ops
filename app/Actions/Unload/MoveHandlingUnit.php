@@ -89,7 +89,7 @@ class MoveHandlingUnit
                 'reason' => $direction->reason,
                 'is_holding' => $direction->isHolding,
             ] + ($direction->suggested === null ? [] : [
-                'override_reason' => 'lane_full',
+                'override_reason' => $direction->overrideReason ?? 'lane_full',
                 'suggested_location_id' => $direction->suggested->getKey(),
                 'suggested_location_code' => $direction->suggested->code,
             ]);

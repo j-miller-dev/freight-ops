@@ -11,6 +11,7 @@ import {
 import { useRef, useState } from 'react';
 import AlertError from '@/components/alert-error';
 import DgDiamond from '@/components/loading/dg-diamond';
+import OutboxBanners from '@/components/outbox-banners';
 import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,6 +74,35 @@ export default function Unload() {
                 backHref="/dashboard"
                 actions={<WarehouseMapDialog />}
             />
+
+            <div className="mx-auto mb-4 w-full max-w-xl space-y-2 empty:hidden">
+                <OutboxBanners outbox={runner.outbox} noun="drop" />
+                {runner.problems.length > 0 && (
+                    <div
+                        role="alert"
+                        className="space-y-1 rounded-xl bg-destructive px-4 py-3 text-white"
+                    >
+                        <p className="font-medium">
+                            These drops could not be recorded. Tell a
+                            supervisor:
+                        </p>
+                        {runner.problems.map((problem) => (
+                            <p key={problem} className="text-sm">
+                                {problem}
+                            </p>
+                        ))}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-1 text-foreground"
+                            onClick={runner.dismissProblems}
+                        >
+                            Dismiss
+                        </Button>
+                    </div>
+                )}
+            </div>
 
             {stage === 'idle' && (
                 <section className="mx-auto w-full max-w-xl space-y-3 rounded-3xl border bg-card p-6 shadow-xs">
@@ -379,15 +409,22 @@ export default function Unload() {
                             {direction.connote_number} · piece{' '}
                             {direction.piece_number} of {direction.item_count}
                         </p>
-                        <p
-                            className={
-                                direction.progress.all_placed
-                                    ? 'text-lg font-semibold text-success'
-                                    : 'text-lg text-muted-foreground'
-                            }
-                        >
-                            {progressMessage(direction.progress)}
-                        </p>
+                        {runner.queued ? (
+                            <p className="text-lg font-semibold text-warning-foreground">
+                                Saved on this device. It will send when you are
+                                back online.
+                            </p>
+                        ) : (
+                            <p
+                                className={
+                                    direction.progress.all_placed
+                                        ? 'text-lg font-semibold text-success'
+                                        : 'text-lg text-muted-foreground'
+                                }
+                            >
+                                {progressMessage(direction.progress)}
+                            </p>
+                        )}
                     </div>
                     <Button
                         type="button"

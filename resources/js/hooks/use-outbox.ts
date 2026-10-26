@@ -1,7 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { db, flushOutbox, isOwnedBy } from '@/lib/outbox';
-import type { FlushCallbacks, OutboxEntry } from '@/lib/outbox';
+import { db, flushOutbox, isOwnedBy, kindOf } from '@/lib/outbox';
+import type { FlushCallbacks, OutboxEntry, OutboxKind } from '@/lib/outbox';
 import { onAuthRestored } from '@/lib/session';
 
 export type { FlushCallbacks, OutboxEntry };
@@ -19,8 +19,12 @@ export interface OutboxState {
     ) => Promise<void>;
 }
 
-async function readCounts(userId: number) {
-    const mine = (entry: OutboxEntry) => isOwnedBy(entry, userId);
+// How often something waiting in the queue is tried again while online.
+const RETRY_MS = 15_000;
+
+async function readCounts(userId: number, kind: OutboxKind) {
+    const mine = (entry: OutboxEntry) =>
+        isOwnedBy(entry, userId) && kindOf(entry) === kind;
 
     const pending = await db.outbox
         .where('status')
@@ -36,23 +40,38 @@ async function readCounts(userId: number) {
     return { pending, failed };
 }
 
-export function useOutbox(): OutboxState {
+/**
+ * The device's queue for one kind of entry. `background` says what to do with
+ * a result when it arrives with nobody tapping anything (back online, or an
+ * entry left from an earlier visit), so the queue drains on its own.
+ */
+export function useOutbox(
+    kind: OutboxKind = 'scan',
+    background?: FlushCallbacks,
+): OutboxState {
     const userId = usePage().props.auth.user.id;
     const [isOnline, setIsOnline] = useState(() => navigator.onLine);
     const [pendingCount, setPendingCount] = useState(0);
     const [hasFailed, setHasFailed] = useState(false);
-    const callbacksRef = useRef<FlushCallbacks | null>(null);
+    const callbacksRef = useRef<FlushCallbacks | null>(background ?? null);
+
+    // The latest handlers, so a late result reaches the screen as it is now.
+    useEffect(() => {
+        if (background) {
+            callbacksRef.current = background;
+        }
+    });
 
     const refreshCounts = useCallback(async () => {
-        const { pending, failed } = await readCounts(userId);
+        const { pending, failed } = await readCounts(userId, kind);
         setPendingCount(pending);
         setHasFailed(failed > 0);
-    }, [userId]);
+    }, [userId, kind]);
 
     useEffect(() => {
         let active = true;
 
-        void readCounts(userId).then(({ pending, failed }) => {
+        void readCounts(userId, kind).then(({ pending, failed }) => {
             if (!active) {
                 return;
             }
@@ -63,11 +82,23 @@ export function useOutbox(): OutboxState {
 
         const flush = () => {
             if (callbacksRef.current) {
-                void flushOutbox(callbacksRef.current, userId).then(
+                void flushOutbox(callbacksRef.current, userId, kind).then(
                     refreshCounts,
                 );
             }
         };
+
+        // Left over from an earlier visit, or still waiting after a bad patch
+        // of signal: try again now and keep trying while it is waiting.
+        if (navigator.onLine) {
+            flush();
+        }
+
+        const retry = setInterval(() => {
+            if (navigator.onLine) {
+                flush();
+            }
+        }, RETRY_MS);
 
         const handleOnline = () => {
             setIsOnline(true);
@@ -82,11 +113,12 @@ export function useOutbox(): OutboxState {
 
         return () => {
             active = false;
+            clearInterval(retry);
             stopListening();
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, [userId, refreshCounts]);
+    }, [userId, kind, refreshCounts]);
 
     const submit = useCallback(
         async (
@@ -108,11 +140,11 @@ export function useOutbox(): OutboxState {
             await refreshCounts();
 
             if (navigator.onLine) {
-                await flushOutbox(callbacks, userId);
+                await flushOutbox(callbacks, userId, kind);
                 await refreshCounts();
             }
         },
-        [refreshCounts, userId],
+        [refreshCounts, userId, kind],
     );
 
     return { isOnline, pendingCount, hasFailed, submit };

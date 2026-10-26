@@ -127,6 +127,34 @@ class BayDirector
         );
     }
 
+    /**
+     * A drop the runner already made while offline: the pallet is physically in
+     * that bay or lane, so record it there even though the rules now say
+     * otherwise. Null when it isn't an active bay or holding lane at the home depot.
+     */
+    public function physicalDrop(BayDirection $direction, string $locationId): ?BayDirection
+    {
+        $location = Location::query()
+            ->whereKey($locationId)
+            ->where('depot_id', $this->homeDepotId())
+            ->whereIn('type', [LocationType::Bay, LocationType::HoldingArea])
+            ->where('is_active', true)
+            ->first();
+
+        if ($location === null) {
+            return null;
+        }
+
+        return new BayDirection(
+            location: $location,
+            reason: "Dropped in {$location->code} while offline. {$direction->reason}",
+            isHolding: $location->type === LocationType::HoldingArea,
+            lane: $location->lane,
+            suggested: $direction->location,
+            overrideReason: 'offline_stale_direction',
+        );
+    }
+
     private function homeDepotId(): ?string
     {
         return Depot::query()
