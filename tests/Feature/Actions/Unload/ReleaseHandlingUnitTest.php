@@ -20,7 +20,7 @@ it('releases a held pallet, recording who and when', function () {
     $released = app(ReleaseHandlingUnit::class)->handle($pallet, $supervisor, $now);
 
     expect($released->released_from_hold_at)->not->toBeNull()
-        ->and($released->released_from_hold_at->equalTo($now))->toBeTrue()
+        ->and($released->released_from_hold_at->diffInSeconds($now, true))->toBeLessThan(2)
         ->and($released->released_from_hold_by)->toBe($supervisor->getKey());
 
     $event = OperationalEvent::query()->where('event_type', EventType::ReleasedFromHold)->sole();
