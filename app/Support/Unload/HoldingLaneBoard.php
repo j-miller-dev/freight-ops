@@ -39,13 +39,13 @@ class HoldingLaneBoard
 
         $rows = $lanes
             ->map(function ($lane) use ($pallets, $rank): ?array {
-                $here = $pallets->filter(fn (array $row): bool => $row['location_id'] === $lane->getKey());
+                $here = $pallets->filter(fn (HoldingPalletRow $row): bool => $row->locationId === $lane->getKey());
 
                 if ($here->isEmpty()) {
                     return null;
                 }
 
-                $worstRow = $here->sortByDesc(fn (array $row) => $rank[$row['status']->status])->first();
+                $worstRow = $here->sortByDesc(fn (HoldingPalletRow $row) => $rank[$row->status->status])->first();
 
                 if ($worstRow === null) {
                     return null;
@@ -56,10 +56,10 @@ class HoldingLaneBoard
                     'code' => $lane->code,
                     'lane' => $lane->lane,
                     'pallet_count' => $here->count(),
-                    'overdue_count' => $here->filter(fn (array $row): bool => $row['status']->status === 'overdue')->count(),
-                    'opportunity_count' => $here->filter(fn (array $row): bool => $row['status']->status === 'opportunity')->count(),
-                    'status' => $worstRow['status']->status,
-                    'reasons' => $worstRow['status']->reasons,
+                    'overdue_count' => $here->filter(fn (HoldingPalletRow $row): bool => $row->status->status === 'overdue')->count(),
+                    'opportunity_count' => $here->filter(fn (HoldingPalletRow $row): bool => $row->status->status === 'opportunity')->count(),
+                    'status' => $worstRow->status->status,
+                    'reasons' => $worstRow->status->reasons,
                 ];
             })
             ->filter()
@@ -81,14 +81,14 @@ class HoldingLaneBoard
         $pallets = $this->palletStatuses($lanes);
 
         $rows = $pallets
-            ->map(fn (array $row): array => [
-                'id' => $row['handling_unit_id'],
-                'barcode' => $row['barcode'],
-                'connote_number' => $row['connote_number'],
-                'sender_name' => $row['sender_name'],
-                'status' => $row['status']->status,
-                'reasons' => $row['status']->reasons,
-                'released' => $row['released'],
+            ->map(fn (HoldingPalletRow $row): array => [
+                'id' => $row->handlingUnitId,
+                'barcode' => $row->barcode,
+                'connote_number' => $row->connoteNumber,
+                'sender_name' => $row->senderName,
+                'status' => $row->status->status,
+                'reasons' => $row->status->reasons,
+                'released' => $row->released,
             ])
             ->values()
             ->all();
@@ -98,7 +98,7 @@ class HoldingLaneBoard
 
     /**
      * @param  Collection<int, Location>  $lanes
-     * @return Collection<int, array{handling_unit_id: mixed, barcode: string, location_id: string|null, connote_number: string|null, sender_name: string|null, released: bool, status: HoldingReadinessStatus}>
+     * @return Collection<int, HoldingPalletRow>
      */
     private function palletStatuses(Collection $lanes): Collection
     {
@@ -121,7 +121,7 @@ class HoldingLaneBoard
         $destinationIds = $pallets->pluck('consignment.destination_depot_id')->filter()->unique()->values()->all();
         $nearestDepartures = $this->nearestDepartures($destinationIds);
 
-        return $pallets->map(function (HandlingUnit $pallet) use ($heldSince, $rules, $nearestDepartures): array {
+        return $pallets->map(function (HandlingUnit $pallet) use ($heldSince, $rules, $nearestDepartures): HoldingPalletRow {
             $consignment = $pallet->consignment;
             $rule = $consignment?->sender_name !== null ? $rules->get($consignment->sender_name) : null;
             $since = $heldSince[$pallet->getKey()] ?? null;
@@ -138,15 +138,15 @@ class HoldingLaneBoard
                 nearestDepartureCode: $nearest['code'] ?? null,
             );
 
-            return [
-                'handling_unit_id' => $pallet->getKey(),
-                'barcode' => $pallet->barcode,
-                'location_id' => $pallet->current_location_id,
-                'connote_number' => $consignment?->connote_number,
-                'sender_name' => $consignment?->sender_name,
-                'released' => $pallet->released_from_hold_at !== null,
-                'status' => $this->readiness->forPallet($facts),
-            ];
+            return new HoldingPalletRow(
+                handlingUnitId: (string) $pallet->getKey(),
+                locationId: (string) $pallet->current_location_id,
+                barcode: $pallet->barcode,
+                connoteNumber: $consignment?->connote_number,
+                senderName: $consignment?->sender_name,
+                released: $pallet->released_from_hold_at !== null,
+                status: $this->readiness->forPallet($facts),
+            );
         });
     }
 
