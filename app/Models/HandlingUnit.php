@@ -58,6 +58,14 @@ class HandlingUnit extends Model
     }
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function releasedFromHoldBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'released_from_hold_by');
+    }
+
+    /**
      * @return HasOneThrough<Manifest, ManifestItem, $this>
      */
     public function currentManifest(): HasOneThrough
@@ -78,6 +86,7 @@ class HandlingUnit extends Model
             'current_status' => HandlingUnitStatus::class,
             'piece_number' => 'integer',
             'is_food' => 'boolean',
+            'released_from_hold_at' => 'datetime',
         ];
     }
 }

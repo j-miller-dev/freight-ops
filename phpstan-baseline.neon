@@ -25,6 +25,12 @@ parameters:
 			path: app/Http/Controllers/Loading/ShowManifestController.php
 
 		-
+			message: '#^Cannot call method toISOString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Unload/ReleaseHandlingUnitController.php
+
+		-
 			message: '#^Call to an undefined method App\\Models\\HandlingUnit\|Illuminate\\Database\\Eloquent\\Collection\<(?:int|\(int\|string\)), App\\Models\\HandlingUnit\>\:\:consignment\(\)\.$#'
 			identifier: method.notFound
 			count: 1

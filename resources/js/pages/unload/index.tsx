@@ -16,11 +16,15 @@ import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import HoldingDialog from '@/components/unload/holding-dialog';
+import HoldingLaneDialog from '@/components/unload/holding-lane-dialog';
+import HoldingLanesStrip from '@/components/unload/holding-lanes-strip';
 import WarehouseMapDialog from '@/components/unload/warehouse-map-dialog';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
+import { useHoldingLanes } from '@/hooks/use-holding-lanes';
 import { useUnloadRunner } from '@/hooks/use-unload-runner';
 import type { ConsignmentProgress } from '@/hooks/use-unload-runner';
 import { cn } from '@/lib/utils';
+import type { HoldingLane } from '@/types/unload';
 
 function progressMessage({
     item_count,
@@ -43,6 +47,9 @@ function progressMessage({
 
 export default function Unload() {
     const runner = useUnloadRunner();
+    const { lanes: holdingLanes, refresh: refreshHoldingLanes } =
+        useHoldingLanes();
+    const [selectedLane, setSelectedLane] = useState<HoldingLane | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const camera = useBarcodeCamera(videoRef, (value) => {
         if (runner.stage === 'idle') {
@@ -73,6 +80,11 @@ export default function Unload() {
                 subtitle="Scan a pallet, then take it to its bay"
                 backHref="/dashboard"
                 actions={<WarehouseMapDialog />}
+            />
+
+            <HoldingLanesStrip
+                lanes={holdingLanes}
+                onSelect={setSelectedLane}
             />
 
             {stage === 'idle' && (
@@ -441,6 +453,14 @@ export default function Unload() {
                     </div>
                 )}
             </div>
+
+            <HoldingLaneDialog
+                laneId={selectedLane?.id ?? null}
+                laneCode={selectedLane?.code ?? ''}
+                open={selectedLane !== null}
+                onOpenChange={(open) => !open && setSelectedLane(null)}
+                onReleased={refreshHoldingLanes}
+            />
         </>
     );
 }

@@ -34,7 +34,7 @@ class BayDirector
         $consignment = $handlingUnit->consignment;
         $homeDepotId = $this->homeDepotId();
 
-        $rule = $consignment->sender_name === null
+        $rule = $consignment->sender_name === null || $handlingUnit->released_from_hold_at !== null
             ? null
             : HoldingRule::query()
                 ->where('is_active', true)

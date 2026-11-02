@@ -14,6 +14,7 @@ enum EventType: string implements HasLabel
     case DgVerified = 'dg_verified';
     case EquipmentAssigned = 'equipment_assigned';
     case ManifestClosed = 'manifest_closed';
+    case ReleasedFromHold = 'released_from_hold';
 
     public function label(): string
     {
@@ -28,6 +29,7 @@ enum EventType: string implements HasLabel
             self::DgVerified => 'DG Verified',
             self::EquipmentAssigned => 'Equipment Assigned',
             self::ManifestClosed => 'Manifest Closed',
+            self::ReleasedFromHold => 'Released From Hold',
         };
     }
 }

@@ -21,6 +21,9 @@ use App\Http\Controllers\Loading\UpdateManifestTrailerController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Unload\ConfirmHandlingUnitDropController;
 use App\Http\Controllers\Unload\DirectHandlingUnitController;
+use App\Http\Controllers\Unload\ListHoldingLanesController;
+use App\Http\Controllers\Unload\ReleaseHandlingUnitController;
+use App\Http\Controllers\Unload\ShowHoldingLaneController;
 use App\Http\Controllers\Unload\SimulateUnloadScanController;
 use App\Http\Controllers\Unload\UnloadController;
 use Illuminate\Http\Request;
@@ -102,6 +105,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('loading.manifests');
 
     Route::get('unload', UnloadController::class)->name('unload.index');
+    Route::get('unload/holding-lanes', ListHoldingLanesController::class)->name('unload.holding-lanes');
+    Route::get('unload/holding-lanes/{location}', ShowHoldingLaneController::class)->name('unload.holding-lanes.show');
+    Route::post('unload/pallets/{handlingUnit}/release', ReleaseHandlingUnitController::class)->name('unload.pallets.release');
     Route::get('unload/simulate-scan', SimulateUnloadScanController::class)->name('unload.simulate-scan');
     Route::post('unload/direction', DirectHandlingUnitController::class)->name('unload.direction');
     Route::post('unload/confirm', ConfirmHandlingUnitDropController::class)->name('unload.confirm');
