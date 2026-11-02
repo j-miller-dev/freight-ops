@@ -37,7 +37,7 @@ class HoldingLaneBoard
 
         $rank = ['settled' => 0, 'opportunity' => 1, 'overdue' => 2];
 
-        return $lanes
+        $rows = $lanes
             ->map(function ($lane) use ($pallets, $rank): ?array {
                 $here = $pallets->filter(fn (array $row): bool => $row['location_id'] === $lane->getKey());
 
@@ -65,6 +65,8 @@ class HoldingLaneBoard
             ->filter()
             ->values()
             ->all();
+
+        return array_values($rows);
     }
 
     /**
@@ -78,7 +80,7 @@ class HoldingLaneBoard
         $lanes = $this->director->holdingLanes()->filter(fn ($lane): bool => $lane->getKey() === $locationId);
         $pallets = $this->palletStatuses($lanes);
 
-        return $pallets
+        $rows = $pallets
             ->map(fn (array $row): array => [
                 'id' => $row['handling_unit_id'],
                 'barcode' => $row['barcode'],
@@ -90,11 +92,12 @@ class HoldingLaneBoard
             ])
             ->values()
             ->all();
+
+        return array_values($rows);
     }
 
     /**
      * @param  Collection<int, Location>  $lanes
-     * @return Collection<int, array<string, mixed>>
      */
     private function palletStatuses(Collection $lanes): Collection
     {
@@ -151,7 +154,7 @@ class HoldingLaneBoard
      * staged/moved event is always the one that set its current location,
      * since both are written together in the same transaction.
      *
-     * @param  list<string>  $handlingUnitIds
+     * @param  array<string>  $handlingUnitIds
      * @return array<string, Carbon>
      */
     private function heldSince(array $handlingUnitIds): array
@@ -169,7 +172,7 @@ class HoldingLaneBoard
     /**
      * The soonest open manifest's departure serving each destination depot.
      *
-     * @param  list<string>  $destinationDepotIds
+     * @param  array<string>  $destinationDepotIds
      * @return array<string, array{departs_at: string, code: string}>
      */
     private function nearestDepartures(array $destinationDepotIds): array
