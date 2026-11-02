@@ -98,6 +98,7 @@ class HoldingLaneBoard
 
     /**
      * @param  Collection<int, Location>  $lanes
+     * @return Collection<int, array{handling_unit_id: mixed, barcode: string, location_id: string|null, connote_number: string|null, sender_name: string|null, released: bool, status: HoldingReadinessStatus}>
      */
     private function palletStatuses(Collection $lanes): Collection
     {
