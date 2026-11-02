@@ -97,6 +97,34 @@ class HoldingLaneBoard
     }
 
     /**
+     * Every pallet currently overdue, across every active lane, for the
+     * scheduled alert to notify on.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function overdueHandlingUnits(): array
+    {
+        $lanes = $this->director->holdingLanes();
+        $pallets = $this->palletStatuses($lanes);
+        $laneCodes = $lanes->mapWithKeys(fn (Location $lane): array => [(string) $lane->getKey() => $lane->code]);
+
+        $rows = $pallets
+            ->filter(fn (HoldingPalletRow $row): bool => $row->status->status === 'overdue')
+            ->map(fn (HoldingPalletRow $row): array => [
+                'handling_unit_id' => $row->handlingUnitId,
+                'barcode' => $row->barcode,
+                'connote_number' => $row->connoteNumber,
+                'lane_code' => $laneCodes->get($row->locationId) ?? '',
+                'reasons' => $row->status->reasons,
+                'held_since' => $row->heldSince,
+            ])
+            ->values()
+            ->all();
+
+        return array_values($rows);
+    }
+
+    /**
      * @param  Collection<int, Location>  $lanes
      * @return Collection<int, HoldingPalletRow>
      */
@@ -146,6 +174,7 @@ class HoldingLaneBoard
                 senderName: $consignment?->sender_name,
                 released: $pallet->released_from_hold_at !== null,
                 status: $this->readiness->forPallet($facts),
+                heldSince: $since,
             );
         });
     }

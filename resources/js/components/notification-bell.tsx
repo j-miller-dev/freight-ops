@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Bell, Truck } from 'lucide-react';
+import { AlertTriangle, Bell, Truck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -10,10 +10,11 @@ import {
 import { getJson, postJson } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
-type Item = {
+type ManifestFinishedItem = {
     id: string;
     read: boolean;
     created_at: string | null;
+    type: 'App\\Notifications\\ManifestLoadingFinished';
     data: {
         manifest_id: string;
         manifest_number: string;
@@ -24,16 +25,51 @@ type Item = {
     };
 };
 
+type HoldingLaneOverdueItem = {
+    id: string;
+    read: boolean;
+    created_at: string | null;
+    type: 'App\\Notifications\\HoldingLaneOverdue';
+    data: {
+        handling_unit_id: string;
+        barcode: string;
+        connote_number: string | null;
+        lane_code: string;
+        reasons: string[];
+    };
+};
+
+type Item = ManifestFinishedItem | HoldingLaneOverdueItem;
+
 type Payload = { data: Item[]; unread_count: number };
 
 const POLL_MS = 20_000;
 
 function title(item: Item): string {
+    if (item.type === 'App\\Notifications\\HoldingLaneOverdue') {
+        return `${item.data.lane_code} has an overdue pallet`;
+    }
+
     return `${item.data.trailer_name ?? item.data.manifest_number} finished loading`;
 }
 
-// For the people who close and dispatch trailers: a bell with what the loaders
-// have just finished. Polled, so it needs no extra infrastructure.
+function description(item: Item): string {
+    if (item.type === 'App\\Notifications\\HoldingLaneOverdue') {
+        return [
+            item.data.barcode,
+            item.data.connote_number,
+            item.data.reasons[0],
+        ]
+            .filter(Boolean)
+            .join(' · ');
+    }
+
+    return `${item.data.manifest_number} · ${item.data.finished_by} · ${item.data.pallets_loaded} pallets · red ${item.data.equipment.red_pallets ?? 0} / blue ${item.data.equipment.blue_pallets ?? 0}`;
+}
+
+// A bell for scalers, supervisors and admins: trailers the loaders have just
+// finished, and holding lanes that have gone overdue. Polled, so it needs no
+// extra infrastructure.
 export default function NotificationBell() {
     const [items, setItems] = useState<Item[]>([]);
     const [unread, setUnread] = useState(0);
@@ -57,7 +93,7 @@ export default function NotificationBell() {
                         json.data[0]
                     ) {
                         toast.info(title(json.data[0]), {
-                            description: `${json.data[0].data.manifest_number} · ${json.data[0].data.finished_by}`,
+                            description: description(json.data[0]),
                         });
                     }
 
@@ -93,7 +129,11 @@ export default function NotificationBell() {
             );
         }
 
-        router.visit(`/loading/manifests/${item.data.manifest_id}`);
+        router.visit(
+            item.type === 'App\\Notifications\\HoldingLaneOverdue'
+                ? '/unload'
+                : `/loading/manifests/${item.data.manifest_id}`,
+        );
     }
 
     function markAllRead() {
@@ -124,7 +164,7 @@ export default function NotificationBell() {
 
             <DropdownMenuContent align="end" className="w-96 p-0">
                 <div className="flex items-center justify-between border-b px-4 py-3">
-                    <p className="font-semibold">Trailers finished</p>
+                    <p className="font-semibold">Notifications</p>
                     {unread > 0 && (
                         <button
                             type="button"
@@ -138,8 +178,8 @@ export default function NotificationBell() {
 
                 {items.length === 0 ? (
                     <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        Nothing yet. You will see a trailer here as soon as a
-                        loader finishes it.
+                        Nothing yet. You will see a trailer finish or a holding
+                        lane go overdue here as soon as it happens.
                     </p>
                 ) : (
                     <ul className="max-h-96 overflow-y-auto">
@@ -153,7 +193,12 @@ export default function NotificationBell() {
                                         !item.read && 'bg-primary/5',
                                     )}
                                 >
-                                    <Truck className="mt-0.5 size-5 shrink-0 text-primary" />
+                                    {item.type ===
+                                    'App\\Notifications\\HoldingLaneOverdue' ? (
+                                        <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+                                    ) : (
+                                        <Truck className="mt-0.5 size-5 shrink-0 text-primary" />
+                                    )}
                                     <span className="min-w-0 flex-1">
                                         <span
                                             className={cn(
@@ -164,15 +209,7 @@ export default function NotificationBell() {
                                             {title(item)}
                                         </span>
                                         <span className="block text-xs text-muted-foreground">
-                                            {item.data.manifest_number} ·{' '}
-                                            {item.data.finished_by} ·{' '}
-                                            {item.data.pallets_loaded} pallets
-                                            {' · '}red{' '}
-                                            {item.data.equipment.red_pallets ??
-                                                0}
-                                            {' / '}blue{' '}
-                                            {item.data.equipment.blue_pallets ??
-                                                0}
+                                            {description(item)}
                                         </span>
                                         {item.created_at && (
                                             <span className="block text-xs text-muted-foreground">

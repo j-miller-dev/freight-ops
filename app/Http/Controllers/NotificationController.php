@@ -15,6 +15,7 @@ class NotificationController extends Controller
             'data' => $user->notifications()->latest()->limit(15)->get()
                 ->map(fn ($notification): array => [
                     'id' => $notification->id,
+                    'type' => $notification->type,
                     'data' => $notification->data,
                     'read' => $notification->read_at !== null,
                     'created_at' => $notification->created_at?->toISOString(),

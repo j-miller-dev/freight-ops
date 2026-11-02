@@ -30,7 +30,8 @@ enum UserRole: string implements HasColor, HasLabel
     }
 
     /**
-     * Roles that are told when a loader finishes a trailer.
+     * Roles that are told about things that need their attention: a loader
+     * finishing a trailer, a holding lane going overdue.
      *
      * @return list<self>
      */
