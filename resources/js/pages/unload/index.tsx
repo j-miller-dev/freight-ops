@@ -16,8 +16,10 @@ import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import HoldingDialog from '@/components/unload/holding-dialog';
+import HoldingLanesStrip from '@/components/unload/holding-lanes-strip';
 import WarehouseMapDialog from '@/components/unload/warehouse-map-dialog';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
+import { useHoldingLanes } from '@/hooks/use-holding-lanes';
 import { useUnloadRunner } from '@/hooks/use-unload-runner';
 import type { ConsignmentProgress } from '@/hooks/use-unload-runner';
 import { cn } from '@/lib/utils';
@@ -43,6 +45,7 @@ function progressMessage({
 
 export default function Unload() {
     const runner = useUnloadRunner();
+    const holdingLanes = useHoldingLanes();
     const videoRef = useRef<HTMLVideoElement>(null);
     const camera = useBarcodeCamera(videoRef, (value) => {
         if (runner.stage === 'idle') {
@@ -74,6 +77,8 @@ export default function Unload() {
                 backHref="/dashboard"
                 actions={<WarehouseMapDialog />}
             />
+
+            <HoldingLanesStrip lanes={holdingLanes} />
 
             {stage === 'idle' && (
                 <section className="mx-auto w-full max-w-xl space-y-3 rounded-3xl border bg-card p-6 shadow-xs">
