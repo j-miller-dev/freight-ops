@@ -6,6 +6,7 @@ use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Models\HandlingUnit;
 use App\Models\HoldingRule;
+use App\Models\Location;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -92,7 +93,7 @@ class HoldingLaneBoard
     }
 
     /**
-     * @param  Collection<int, \App\Models\Location>  $lanes
+     * @param  Collection<int, Location>  $lanes
      * @return Collection<int, array<string, mixed>>
      */
     private function palletStatuses(Collection $lanes): Collection
