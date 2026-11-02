@@ -9,6 +9,7 @@ use App\Exceptions\Loading\ManifestNotOpen;
 use App\Exceptions\Loading\ManifestNotReadyToClose;
 use App\Exceptions\Unload\DirectionChanged;
 use App\Exceptions\Unload\HandlingUnitAlreadyLoaded;
+use App\Exceptions\Unload\HandlingUnitNotHeld;
 use App\Exceptions\Unload\NoBayForDestination;
 use App\Exceptions\Unload\UnloadEventConflict;
 use App\Http\Middleware\HandleAppearance;
@@ -152,6 +153,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 $exception instanceof HandlingUnitAlreadyLoaded => [
                     'code' => 'handling_unit_already_loaded',
+                    'message' => $exception->getMessage(),
+                    'status' => 409,
+                ],
+
+                $exception instanceof HandlingUnitNotHeld => [
+                    'code' => 'handling_unit_not_held',
                     'message' => $exception->getMessage(),
                     'status' => 409,
                 ],

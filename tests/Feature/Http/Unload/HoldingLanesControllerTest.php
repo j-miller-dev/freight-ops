@@ -136,3 +136,30 @@ it('keeps lanes separate and counts each one on its own', function () {
     expect($byCode['HOLD1']['pallet_count'])->toBe(1)
         ->and($byCode['HOLD2']['pallet_count'])->toBe(2);
 });
+
+it('lists the pallets in one lane for a supervisor to decide whether to release them', function () {
+    $yard = holdingLaneYard();
+    HoldingRule::factory()->create(['sender_name' => 'Harbourline Hardware', 'max_hold_days' => 3]);
+    $pallet = holdPalletInLane($yard['destination'], $yard['lane'], 'Harbourline Hardware', now()->subDays(4));
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('unload.holding-lanes.show', $yard['lane']))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $pallet->getKey())
+        ->assertJsonPath('data.0.barcode', $pallet->barcode)
+        ->assertJsonPath('data.0.sender_name', 'Harbourline Hardware')
+        ->assertJsonPath('data.0.status', 'overdue')
+        ->assertJsonPath('data.0.released', false);
+});
+
+it('shows a pallet as released once it has been', function () {
+    $yard = holdingLaneYard();
+    $pallet = holdPalletInLane($yard['destination'], $yard['lane']);
+    $pallet->forceFill(['released_from_hold_at' => now(), 'released_from_hold_by' => User::factory()->create()->getKey()])->save();
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('unload.holding-lanes.show', $yard['lane']))
+        ->assertOk()
+        ->assertJsonPath('data.0.released', true);
+});

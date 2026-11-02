@@ -14,10 +14,15 @@ const STATUS_STYLE: Record<
     settled: { chip: 'bg-muted text-muted-foreground', icon: PackageSearch },
 };
 
+type Props = {
+    lanes: HoldingLane[];
+    onSelect: (lane: HoldingLane) => void;
+};
+
 // What a runner needs to know about held freight without going to check each
 // lane themselves: a lane only appears once it has freight in it, with the
-// most urgent reason shown first.
-export default function HoldingLanesStrip({ lanes }: { lanes: HoldingLane[] }) {
+// most urgent reason shown first. Tapping a lane opens its pallets.
+export default function HoldingLanesStrip({ lanes, onSelect }: Props) {
     if (lanes.length === 0) {
         return null;
     }
@@ -28,10 +33,12 @@ export default function HoldingLanesStrip({ lanes }: { lanes: HoldingLane[] }) {
                 const { chip, icon: Icon } = STATUS_STYLE[lane.status];
 
                 return (
-                    <div
+                    <button
                         key={lane.id}
+                        type="button"
+                        onClick={() => onSelect(lane)}
                         className={cn(
-                            'flex shrink-0 items-center gap-2 rounded-xl px-3 py-2',
+                            'flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left transition active:scale-[0.98]',
                             chip,
                         )}
                     >
@@ -51,7 +58,7 @@ export default function HoldingLanesStrip({ lanes }: { lanes: HoldingLane[] }) {
                                 <p className="opacity-90">{lane.reasons[0]}</p>
                             )}
                         </div>
-                    </div>
+                    </button>
                 );
             })}
         </div>

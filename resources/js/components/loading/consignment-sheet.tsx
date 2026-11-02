@@ -118,6 +118,8 @@ function eventLabel(event: PieceEvent): string {
             return event.manifest_number
                 ? `Manifest ${event.manifest_number} closed`
                 : 'Manifest closed';
+        case 'released_from_hold':
+            return 'Released from holding';
         default:
             return event.type.replaceAll('_', ' ');
     }

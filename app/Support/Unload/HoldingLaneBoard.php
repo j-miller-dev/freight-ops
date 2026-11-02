@@ -7,6 +7,7 @@ use App\Enums\HandlingUnitStatus;
 use App\Models\HandlingUnit;
 use App\Models\HoldingRule;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -27,54 +28,17 @@ class HoldingLaneBoard
     public function lanes(): array
     {
         $lanes = $this->director->holdingLanes();
-
-        if ($lanes->isEmpty()) {
-            return [];
-        }
-
-        $pallets = HandlingUnit::query()
-            ->whereIn('current_location_id', $lanes->pluck('id'))
-            ->where('current_status', HandlingUnitStatus::Held)
-            ->with('consignment:id,sender_name,service_code,destination_depot_id,connote_number')
-            ->get(['id', 'current_location_id', 'consignment_id']);
+        $pallets = $this->palletStatuses($lanes);
 
         if ($pallets->isEmpty()) {
             return [];
         }
 
-        $heldSince = $this->heldSince($pallets->pluck('id')->all());
-        $rules = HoldingRule::query()->where('is_active', true)->get()->keyBy('sender_name');
-        $destinationIds = $pallets->pluck('consignment.destination_depot_id')->filter()->unique()->values()->all();
-        $nearestDepartures = $this->nearestDepartures($destinationIds);
-
-        $statuses = $pallets->map(function (HandlingUnit $pallet) use ($heldSince, $rules, $nearestDepartures): array {
-            $consignment = $pallet->consignment;
-            $rule = $consignment?->sender_name !== null ? $rules->get($consignment->sender_name) : null;
-            $since = $heldSince[$pallet->getKey()] ?? null;
-            $nearest = $consignment?->destination_depot_id !== null
-                ? $nearestDepartures[$consignment->destination_depot_id] ?? null
-                : null;
-
-            $facts = new HoldingPalletFacts(
-                daysHeld: $since === null ? null : (int) $since->diffInDays(now()),
-                maxHoldDays: $rule?->max_hold_days,
-                minutesToNearestDeparture: $nearest === null
-                    ? null
-                    : (int) round(now()->diffInSeconds($nearest['departs_at'], false) / 60),
-                nearestDepartureCode: $nearest['code'] ?? null,
-            );
-
-            return [
-                'location_id' => $pallet->current_location_id,
-                'status' => $this->readiness->forPallet($facts),
-            ];
-        });
-
         $rank = ['settled' => 0, 'opportunity' => 1, 'overdue' => 2];
 
         return $lanes
-            ->map(function ($lane) use ($statuses, $rank): ?array {
-                $here = $statuses->filter(fn (array $row): bool => $row['location_id'] === $lane->getKey());
+            ->map(function ($lane) use ($pallets, $rank): ?array {
+                $here = $pallets->filter(fn (array $row): bool => $row['location_id'] === $lane->getKey());
 
                 if ($here->isEmpty()) {
                     return null;
@@ -100,6 +64,85 @@ class HoldingLaneBoard
             ->filter()
             ->values()
             ->all();
+    }
+
+    /**
+     * Every pallet in one lane, for a supervisor deciding whether to release
+     * any of them early.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function detail(string $locationId): array
+    {
+        $lanes = $this->director->holdingLanes()->filter(fn ($lane): bool => $lane->getKey() === $locationId);
+        $pallets = $this->palletStatuses($lanes);
+
+        return $pallets
+            ->map(fn (array $row): array => [
+                'id' => $row['handling_unit_id'],
+                'barcode' => $row['barcode'],
+                'connote_number' => $row['connote_number'],
+                'sender_name' => $row['sender_name'],
+                'status' => $row['status']->status,
+                'reasons' => $row['status']->reasons,
+                'released' => $row['released'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, \App\Models\Location>  $lanes
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function palletStatuses(Collection $lanes): Collection
+    {
+        if ($lanes->isEmpty()) {
+            return collect();
+        }
+
+        $pallets = HandlingUnit::query()
+            ->whereIn('current_location_id', $lanes->pluck('id'))
+            ->where('current_status', HandlingUnitStatus::Held)
+            ->with('consignment:id,sender_name,service_code,destination_depot_id,connote_number')
+            ->get(['id', 'barcode', 'current_location_id', 'consignment_id', 'released_from_hold_at']);
+
+        if ($pallets->isEmpty()) {
+            return collect();
+        }
+
+        $heldSince = $this->heldSince($pallets->pluck('id')->all());
+        $rules = HoldingRule::query()->where('is_active', true)->get()->keyBy('sender_name');
+        $destinationIds = $pallets->pluck('consignment.destination_depot_id')->filter()->unique()->values()->all();
+        $nearestDepartures = $this->nearestDepartures($destinationIds);
+
+        return $pallets->map(function (HandlingUnit $pallet) use ($heldSince, $rules, $nearestDepartures): array {
+            $consignment = $pallet->consignment;
+            $rule = $consignment?->sender_name !== null ? $rules->get($consignment->sender_name) : null;
+            $since = $heldSince[$pallet->getKey()] ?? null;
+            $nearest = $consignment?->destination_depot_id !== null
+                ? $nearestDepartures[$consignment->destination_depot_id] ?? null
+                : null;
+
+            $facts = new HoldingPalletFacts(
+                daysHeld: $since === null ? null : (int) $since->diffInDays(now()),
+                maxHoldDays: $rule?->max_hold_days,
+                minutesToNearestDeparture: $nearest === null
+                    ? null
+                    : (int) round(now()->diffInSeconds($nearest['departs_at'], false) / 60),
+                nearestDepartureCode: $nearest['code'] ?? null,
+            );
+
+            return [
+                'handling_unit_id' => $pallet->getKey(),
+                'barcode' => $pallet->barcode,
+                'location_id' => $pallet->current_location_id,
+                'connote_number' => $consignment?->connote_number,
+                'sender_name' => $consignment?->sender_name,
+                'released' => $pallet->released_from_hold_at !== null,
+                'status' => $this->readiness->forPallet($facts),
+            ];
+        });
     }
 
     /**

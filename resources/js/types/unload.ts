@@ -12,3 +12,15 @@ export type HoldingLane = {
     status: HoldingLaneStatus;
     reasons: string[];
 };
+
+// One pallet sitting in a holding lane, for a supervisor deciding whether to
+// release it early.
+export type HoldingLanePallet = {
+    id: string;
+    barcode: string;
+    connote_number: string | null;
+    sender_name: string | null;
+    status: HoldingLaneStatus;
+    reasons: string[];
+    released: boolean;
+};
