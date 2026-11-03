@@ -2,6 +2,8 @@
 
 namespace App\Support\Unload;
 
+use Illuminate\Support\Carbon;
+
 /** One held pallet with its readiness, used internally by HoldingLaneBoard. */
 final readonly class HoldingPalletRow
 {
@@ -13,5 +15,6 @@ final readonly class HoldingPalletRow
         public ?string $senderName,
         public bool $released,
         public HoldingReadinessStatus $status,
+        public ?Carbon $heldSince,
     ) {}
 }
