@@ -88,7 +88,8 @@ class SydneyFreightSeeder extends Seeder
 
     public function run(): void
     {
-        $loader = User::query()->where('email', 'test@example.com')->firstOrFail();
+        // Loader (and "finisher" below) is looked up by username; override with SEED_LOADER_USERNAME.
+        $loader = User::query()->where('username', env('SEED_LOADER_USERNAME', 'jason.miller'))->firstOrFail();
         $sydney = Depot::query()->where('code', 'SYD')->firstOrFail();
         $melbourne = Depot::query()->where('code', 'MEL')->firstOrFail();
 
@@ -135,7 +136,7 @@ class SydneyFreightSeeder extends Seeder
             );
         }
 
-        $manifests = $this->manifests($melbourne, $sydney);
+        $manifests = $this->manifests($melbourne, $sydney, $loader);
 
         // Fixed seed so every run produces the same barcodes and load states.
         mt_srand(20261009);
@@ -150,7 +151,7 @@ class SydneyFreightSeeder extends Seeder
     /**
      * @return list<Manifest>
      */
-    private function manifests(Depot $origin, Depot $destination): array
+    private function manifests(Depot $origin, Depot $destination, User $finisher): array
     {
         // Minutes until each trailer departs; the last one has already left.
         $departures = [25, 100, 180, 300, 420, 540, -120];
@@ -159,7 +160,6 @@ class SydneyFreightSeeder extends Seeder
         // Which trailer carries each manifest: the own fleet plus two contractors.
         $assigned = ['F-Ops 1', 'F-Ops 2', 'F-Ops 3', 'Russell Coight Transport', 'Dingo Creek Haulage', 'F-Ops 1', 'F-Ops 2'];
         $manifests = [];
-        $finisher = User::query()->where('email', 'test@example.com')->first();
         $closer = User::query()->where('role', 'scaler')->orderBy('id')->first();
 
         for ($n = 1; $n <= self::MANIFEST_COUNT; $n++) {
