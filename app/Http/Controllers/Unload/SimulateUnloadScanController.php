@@ -15,7 +15,10 @@ class SimulateUnloadScanController extends Controller
      */
     public function __invoke(): JsonResponse
     {
-        abort_unless(app()->environment(['local', 'testing']), 404);
+        abort_unless(
+            app()->environment(['local', 'testing']) || config('freight.simulate_scans'),
+            404,
+        );
 
         $pallet = HandlingUnit::query()
             ->where('current_status', '!=', HandlingUnitStatus::Loaded->value)

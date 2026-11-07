@@ -12,7 +12,10 @@ class SimulateHandlingUnitScanController extends Controller
 {
     public function __invoke(Manifest $manifest): JsonResponse
     {
-        abort_unless(app()->environment(['local', 'testing']), 404);
+        abort_unless(
+            app()->environment(['local', 'testing']) || config('freight.simulate_scans'),
+            404,
+        );
 
         $destinationIds = $manifest->destinations()->pluck('depots.id');
 
