@@ -161,7 +161,8 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Public sign-up is off unless FORTIFY_REGISTRATION=true (local dev and tests turn it on).
+        ...(env('FORTIFY_REGISTRATION', false) ? [Features::registration()] : []),
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([
