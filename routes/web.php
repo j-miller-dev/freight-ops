@@ -10,11 +10,14 @@ use App\Http\Controllers\Loading\ListManifestConsignmentsController;
 use App\Http\Controllers\Loading\ListNextUpController;
 use App\Http\Controllers\Loading\LoadHandlingUnitController;
 use App\Http\Controllers\Loading\LoadingController;
+use App\Http\Controllers\Loading\ManifestPresenceController;
 use App\Http\Controllers\Loading\ManifestSummaryController;
+use App\Http\Controllers\Loading\ScanOffHandlingUnitController;
 use App\Http\Controllers\Loading\ShowDepotManifestsController;
 use App\Http\Controllers\Loading\ShowManifestConsignmentController;
 use App\Http\Controllers\Loading\ShowManifestController;
 use App\Http\Controllers\Loading\SimulateHandlingUnitScanController;
+use App\Http\Controllers\Loading\SimulateScanOffController;
 use App\Http\Controllers\Loading\UpdateConsignmentHoldBackController;
 use App\Http\Controllers\Loading\UpdateManifestItemPositionController;
 use App\Http\Controllers\Loading\UpdateManifestTrailerController;
@@ -97,6 +100,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('loading/manifests/{manifest}/scan', LoadHandlingUnitController::class)
         ->name('loading.scan');
+
+    Route::post('loading/manifests/{manifest}/scan-off', ScanOffHandlingUnitController::class)
+        ->name('loading.scan-off');
+
+    Route::get('loading/manifests/{manifest}/simulate-scan-off', SimulateScanOffController::class)
+        ->name('loading.simulate-scan-off');
+
+    Route::post('loading/manifests/{manifest}/presence', ManifestPresenceController::class)
+        ->name('loading.manifest.presence');
 
     Route::get('loading/manifests/{manifest}/simulate-scan', SimulateHandlingUnitScanController::class)
         ->name('loading.simulate-scan');

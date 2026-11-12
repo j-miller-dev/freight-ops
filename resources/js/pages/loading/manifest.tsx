@@ -8,6 +8,7 @@ import {
     ListChecks,
     ListOrdered,
     Lock,
+    PackageMinus,
     Truck,
     TriangleAlert,
 } from 'lucide-react';
@@ -21,7 +22,9 @@ import DepartureBadge from '@/components/loading/departure-badge';
 import EquipmentDialog from '@/components/loading/equipment-dialog';
 import FinishDialog from '@/components/loading/finish-dialog';
 import NextUpSheet from '@/components/loading/next-up-sheet';
+import PresenceChips from '@/components/loading/presence-chips';
 import ScanFeedback from '@/components/loading/scan-feedback';
+import ScanOffFeedback from '@/components/loading/scan-off-feedback';
 import TrailerAlerts, {
     ClashBanner,
 } from '@/components/loading/trailer-alerts';
@@ -34,6 +37,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
 import { useEquipment } from '@/hooks/use-equipment';
+import { useManifestPresence } from '@/hooks/use-manifest-presence';
+import { useManifestScanOff } from '@/hooks/use-manifest-scan-off';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
 import { useManifestSummary } from '@/hooks/use-manifest-summary';
 import { deleteJson, patchJson, postJson } from '@/lib/http';
@@ -87,7 +92,9 @@ export default function LoadingManifest({
 }: Props) {
     const scanner = useManifestScanner(manifest.id);
     const videoRef = useRef<HTMLVideoElement>(null);
-    const camera = useBarcodeCamera(videoRef, scanner.scan);
+    const removal = useManifestScanOff(manifest.id);
+    const others = useManifestPresence(manifest.id);
+    const [scanOffMode, setScanOffMode] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const [keyboard, setKeyboard] = useState(false);
     const [trailer, setTrailer] = useState(manifest.trailer_type);
@@ -157,8 +164,62 @@ export default function LoadingManifest({
     // more scans (reopen to carry on).
     const closed = status !== 'open' || finished !== null;
     const { outbox } = scanner;
-    const busy = scanner.scanning || scanner.simulating;
-    const progress = scanner.result?.progress;
+    // Scan-off mode ends by itself if the manifest closes under the loader.
+    const scanOffActive = scanOffMode && !closed;
+    const busy =
+        scanner.scanning ||
+        scanner.simulating ||
+        removal.busy ||
+        removal.simulating;
+    // After a take-off the counts come from it; a later load replaces them.
+    const progress = removal.result?.progress ?? scanner.result?.progress;
+
+    // The camera, a hardware scanner and the typed field all end up here, so
+    // one place decides whether a scan loads the pallet or takes it off.
+    async function submitBarcode(value: string) {
+        if (!scanOffActive) {
+            scanner.scan(value);
+
+            return;
+        }
+
+        scanner.setBarcode(value.trim());
+
+        if (await removal.scanOff(value)) {
+            scanner.setBarcode('');
+            scanner.clearResult();
+            void refresh();
+        }
+    }
+
+    const camera = useBarcodeCamera(videoRef, (value) => {
+        void submitBarcode(value);
+    });
+
+    async function simulateScanOff() {
+        const barcode = await removal.pickLoaded();
+
+        if (barcode) {
+            await submitBarcode(barcode);
+        }
+    }
+
+    function toggleScanOff() {
+        setScanOffMode((value) => !value);
+        scanner.setBarcode('');
+        scanner.clearResult();
+        removal.clear();
+    }
+
+    // A load that comes through afterwards makes the last take-off stale.
+    const { clear: clearRemoval } = removal;
+    const hasLoadResult = scanner.result !== null;
+
+    useEffect(() => {
+        if (hasLoadResult) {
+            clearRemoval();
+        }
+    }, [hasLoadResult, scanner.result, clearRemoval]);
 
     // Hardware scanners type into whatever is focused, so the field has to be
     // ready again after every scan and after the warning dialog closes.
@@ -166,7 +227,7 @@ export default function LoadingManifest({
         if (!busy && !scanner.warning && !closed) {
             inputRef.current?.focus();
         }
-    }, [busy, scanner.warning, closed]);
+    }, [busy, scanner.warning, closed, scanOffActive]);
 
     async function chooseTrailer(value: string) {
         const previous = trailer;
@@ -314,6 +375,13 @@ export default function LoadingManifest({
                         disabled={closed}
                     />
                     <RailButton
+                        icon={PackageMinus}
+                        label={scanOffActive ? 'Done' : 'Scan off'}
+                        tone={scanOffActive ? 'danger' : 'default'}
+                        onClick={toggleScanOff}
+                        disabled={closed}
+                    />
+                    <RailButton
                         icon={Truck}
                         label={trailerInfo.label}
                         onClick={() => setTrailerOpen(true)}
@@ -365,6 +433,26 @@ export default function LoadingManifest({
                                 . Scanning is disabled.
                             </p>
                         )}
+
+                        <PresenceChips others={others} />
+
+                        {scanOffActive && (
+                            <p className="flex flex-wrap items-center gap-3 rounded-xl bg-amber-500/15 px-4 py-3 font-medium text-amber-700 dark:text-amber-300">
+                                <PackageMinus className="size-5 shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                    Scan-off mode: anything you scan now comes
+                                    OFF this trailer.
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-xl"
+                                    onClick={toggleScanOff}
+                                >
+                                    Done
+                                </Button>
+                            </p>
+                        )}
                     </div>
 
                     <ClashBanner summary={summary} />
@@ -412,7 +500,9 @@ export default function LoadingManifest({
                                     htmlFor="barcode"
                                     className="block text-center text-sm font-medium text-muted-foreground"
                                 >
-                                    Scan item ID
+                                    {scanOffActive
+                                        ? 'Scan item to take off'
+                                        : 'Scan item ID'}
                                 </label>
 
                                 <div className="flex gap-2">
@@ -428,7 +518,9 @@ export default function LoadingManifest({
                                         onKeyDown={(event) => {
                                             if (event.key === 'Enter') {
                                                 event.preventDefault();
-                                                scanner.scan(scanner.barcode);
+                                                void submitBarcode(
+                                                    scanner.barcode,
+                                                );
                                             }
                                         }}
                                         placeholder="Barcode"
@@ -461,9 +553,14 @@ export default function LoadingManifest({
                                     <Button
                                         type="button"
                                         size="xl"
+                                        variant={
+                                            scanOffActive
+                                                ? 'destructive'
+                                                : 'default'
+                                        }
                                         className="flex-1"
                                         onClick={() =>
-                                            scanner.scan(scanner.barcode)
+                                            void submitBarcode(scanner.barcode)
                                         }
                                         disabled={
                                             !scanner.barcode.trim() ||
@@ -471,7 +568,13 @@ export default function LoadingManifest({
                                             closed
                                         }
                                     >
-                                        {scanner.scanning ? 'Loading…' : 'Load'}
+                                        {scanOffActive
+                                            ? removal.busy
+                                                ? 'Taking off…'
+                                                : 'Take off'
+                                            : scanner.scanning
+                                              ? 'Loading…'
+                                              : 'Load'}
                                     </Button>
 
                                     {camera.supported && (
@@ -519,26 +622,49 @@ export default function LoadingManifest({
                                 )}
                             </div>
 
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-muted-foreground"
-                                onClick={() => void scanner.simulate()}
-                                disabled={busy || closed}
-                            >
-                                {scanner.simulating
-                                    ? 'Simulating…'
-                                    : 'Simulate seeded scan'}
-                            </Button>
+                            {scanOffActive ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-muted-foreground"
+                                    onClick={() => void simulateScanOff()}
+                                    disabled={busy || closed}
+                                >
+                                    {removal.simulating
+                                        ? 'Simulating…'
+                                        : 'Simulate scan off'}
+                                </Button>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-muted-foreground"
+                                    onClick={() => void scanner.simulate()}
+                                    disabled={busy || closed}
+                                >
+                                    {scanner.simulating
+                                        ? 'Simulating…'
+                                        : 'Simulate seeded scan'}
+                                </Button>
+                            )}
                         </div>
 
                         <div className="flex flex-col items-center gap-6 border-t pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
-                            <ScanFeedback
-                                result={scanner.result}
-                                error={scanner.error}
-                                scanning={busy}
-                            />
+                            {scanOffActive ? (
+                                <ScanOffFeedback
+                                    result={removal.result}
+                                    error={removal.error}
+                                    busy={removal.busy}
+                                />
+                            ) : (
+                                <ScanFeedback
+                                    result={scanner.result}
+                                    error={scanner.error}
+                                    scanning={busy}
+                                />
+                            )}
 
                             <div className="w-full space-y-2">
                                 <div className="flex items-baseline justify-between">

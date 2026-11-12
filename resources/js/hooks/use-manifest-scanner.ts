@@ -236,5 +236,9 @@ export function useManifestScanner(manifestId: string) {
         simulate,
         confirmWarning,
         dismissWarning: () => setWarning(null),
+        clearResult: () => {
+            setResult(null);
+            setError('');
+        },
     };
 }

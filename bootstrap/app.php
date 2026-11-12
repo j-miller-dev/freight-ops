@@ -5,6 +5,7 @@ use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
 use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
+use App\Exceptions\Loading\HandlingUnitNotOnManifest;
 use App\Exceptions\Loading\ManifestNotOpen;
 use App\Exceptions\Loading\ManifestNotReadyToClose;
 use App\Exceptions\Unload\DirectionChanged;
@@ -66,6 +67,16 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'manifest_not_open',
                     'message' => $exception->getMessage(),
                     'status' => 409,
+                ],
+
+                $exception instanceof HandlingUnitNotOnManifest => [
+                    'code' => 'handling_unit_not_on_manifest',
+                    'message' => $exception->getMessage(),
+                    'status' => 409,
+                    'details' => [
+                        'manifest_number' => $exception->manifest->manifest_number,
+                        'actual_manifest_number' => $exception->actualManifest?->manifest_number,
+                    ],
                 ],
 
                 $exception instanceof ManifestNotReadyToClose => [
