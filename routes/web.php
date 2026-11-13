@@ -21,6 +21,7 @@ use App\Http\Controllers\Loading\SimulateScanOffController;
 use App\Http\Controllers\Loading\UpdateConsignmentHoldBackController;
 use App\Http\Controllers\Loading\UpdateManifestItemPositionController;
 use App\Http\Controllers\Loading\UpdateManifestTrailerController;
+use App\Http\Controllers\Loading\UpdateManifestUnitLabelsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Unload\ConfirmHandlingUnitDropController;
 use App\Http\Controllers\Unload\DirectHandlingUnitController;
@@ -106,6 +107,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('loading/manifests/{manifest}/simulate-scan-off', SimulateScanOffController::class)
         ->name('loading.simulate-scan-off');
+
+    Route::put('loading/manifests/{manifest}/units/{unit}/labels', UpdateManifestUnitLabelsController::class)
+        ->whereNumber('unit')
+        ->name('loading.manifest.unit-labels');
 
     Route::post('loading/manifests/{manifest}/presence', ManifestPresenceController::class)
         ->name('loading.manifest.presence');

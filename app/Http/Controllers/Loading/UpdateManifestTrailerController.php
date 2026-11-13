@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Loading;
 use App\Enums\TrailerType;
 use App\Http\Controllers\Controller;
 use App\Models\Manifest;
+use App\Models\ManifestUnitLabel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -28,6 +29,12 @@ class UpdateManifestTrailerController extends Controller
             $cleared = $manifest->manifestItems()
                 ->whereNotNull('trailer_unit')
                 ->update(['trailer_unit' => null, 'trailer_row' => null, 'trailer_side' => null]);
+
+            // Labels on units the new layout does not have would never be seen.
+            ManifestUnitLabel::query()
+                ->where('manifest_id', $manifest->getKey())
+                ->where('unit', '>', count($type->rows()))
+                ->delete();
         }
 
         $manifest->trailer_type = $type;

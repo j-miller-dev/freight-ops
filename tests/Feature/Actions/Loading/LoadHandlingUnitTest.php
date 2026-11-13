@@ -7,9 +7,9 @@ use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
-use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
+use App\Exceptions\Loading\SegregationClash;
 use App\Models\Consignment;
 use App\Models\Depot;
 use App\Models\HandlingUnit;
@@ -706,14 +706,16 @@ it('reports a food/DG clash when a DG pallet would join food already on the trai
             clientEventId: (string) Str::uuid(),
             occurredAt: now(),
         );
-    } catch (FoodDgClash $exception) {
+    } catch (SegregationClash $exception) {
         $caughtException = $exception;
     }
 
     expect($caughtException)->not->toBeNull()
         ->and($caughtException->handlingUnit->is($dgPallet))->toBeTrue()
         ->and($caughtException->selectedManifest->is($manifest))->toBeTrue()
-        ->and($caughtException->conflictingClasses)->toBe(['8'])
+        ->and($caughtException->issues[0]['a'])->toBe('food')
+        ->and($caughtException->issues[0]['b'])->toBe('8')
+        ->and($caughtException->issues[0]['status'])->toBe('undecided')
         ->and(ManifestItem::query()->where('handling_unit_id', $dgPallet->getKey())->exists())->toBeFalse();
 });
 
@@ -749,13 +751,15 @@ it('reports a food/DG clash when a food pallet would join an incompatible DG cla
             clientEventId: (string) Str::uuid(),
             occurredAt: now(),
         );
-    } catch (FoodDgClash $exception) {
+    } catch (SegregationClash $exception) {
         $caughtException = $exception;
     }
 
     expect($caughtException)->not->toBeNull()
         ->and($caughtException->handlingUnit->is($foodPallet))->toBeTrue()
-        ->and($caughtException->conflictingClasses)->toBe(['6.1']);
+        ->and($caughtException->issues[0]['a'])->toBe('food')
+        ->and($caughtException->issues[0]['b'])->toBe('6.1')
+        ->and($caughtException->issues[0]['status'])->toBe('undecided');
 });
 
 it('does not warn for a DG class that does not conflict with food', function () {
@@ -779,7 +783,7 @@ it('does not warn for a DG class that does not conflict with food', function () 
         occurredAt: now()->subMinute(),
     );
 
-    // Class 3 (flammable liquid) is not in DgSegregationChecker::FOOD_INCOMPATIBLE_CLASSES.
+    // No rule keeps class 3 (flammable liquid) away from food.
     $dgPallet = HandlingUnit::factory()->for($consignment)->create(['dg_class' => '3']);
 
     $manifestItem = $action->handle(
@@ -823,12 +827,12 @@ it('loads a food/DG-clashing pallet when the warning is acknowledged', function 
         clientEventId: (string) Str::uuid(),
         occurredAt: now(),
         acknowledgedWarnings: [
-            LoadWarningType::FoodDgClash,
+            LoadWarningType::SegregationClash,
         ],
     );
 
     $acknowledgement = WarningAcknowledgement::query()
-        ->where('warning_type', LoadWarningType::FoodDgClash)
+        ->where('warning_type', LoadWarningType::SegregationClash)
         ->sole();
 
     expect($manifestItem->handlingUnit->is($dgPallet))->toBeTrue()
@@ -838,5 +842,6 @@ it('loads a food/DG-clashing pallet when the warning is acknowledged', function 
         ->and($acknowledgement->acknowledgedBy->is($loader))->toBeTrue()
         ->and($acknowledgement->metadata['is_food'])->toBeFalse()
         ->and($acknowledgement->metadata['dg_class'])->toBe('8')
-        ->and($acknowledgement->metadata['conflicting_classes'])->toBe(['8']);
+        ->and($acknowledgement->metadata['issues'][0]['b'])->toBe('8')
+        ->and($acknowledgement->metadata['issues'][0]['status'])->toBe('undecided');
 });

@@ -30,6 +30,8 @@ import TrailerAlerts, {
 } from '@/components/loading/trailer-alerts';
 import TrailerDialog from '@/components/loading/trailer-dialog';
 import TrailerMapDialog from '@/components/loading/trailer-map-dialog';
+import UnitLabelDialog from '@/components/loading/unit-label-dialog';
+import UnitStrip from '@/components/loading/unit-strip';
 import WarningDialog from '@/components/loading/warning-dialog';
 import OutboxBanners from '@/components/outbox-banners';
 import PageHeader from '@/components/page-header';
@@ -41,7 +43,7 @@ import { useManifestPresence } from '@/hooks/use-manifest-presence';
 import { useManifestScanOff } from '@/hooks/use-manifest-scan-off';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
 import { useManifestSummary } from '@/hooks/use-manifest-summary';
-import { deleteJson, patchJson, postJson } from '@/lib/http';
+import { deleteJson, patchJson, postJson, putJson } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type {
     ClosedState,
@@ -49,10 +51,12 @@ import type {
     EquipmentCounts,
     EquipmentItemDef,
     FinishedState,
+    LoadCategoryOption,
     ManifestSummary,
     TrailerInfo,
     TrailerPosition,
     TrailerTypeOption,
+    TrailerUnitState,
 } from '@/types/loading';
 
 type Props = {
@@ -68,6 +72,7 @@ type Props = {
     };
     destination: { id: string; code: string; name: string } | null;
     summary: ManifestSummary;
+    load_categories: LoadCategoryOption[];
     bay_code: string | null;
     trailer_types: TrailerTypeOption[];
     trailer: TrailerInfo | null;
@@ -82,6 +87,7 @@ export default function LoadingManifest({
     manifest,
     destination,
     summary: initialSummary,
+    load_categories: loadCategories,
     trailer_types: trailerTypes,
     trailer: trailerInfoProp,
     finished: initialFinished,
@@ -101,6 +107,7 @@ export default function LoadingManifest({
     const [trailerOpen, setTrailerOpen] = useState(false);
     const [consignmentsOpen, setConsignmentsOpen] = useState(false);
     const [nextUpOpen, setNextUpOpen] = useState(false);
+    const [labelUnit, setLabelUnit] = useState<TrailerUnitState | null>(null);
     const { summary, refresh } = useManifestSummary(
         manifest.id,
         initialSummary,
@@ -252,6 +259,25 @@ export default function LoadingManifest({
         }
     }
 
+    async function saveUnitLabels(
+        unit: number,
+        categories: string[],
+    ): Promise<boolean> {
+        try {
+            await putJson(
+                `/loading/manifests/${manifest.id}/units/${unit}/labels`,
+                { categories },
+            );
+            await refresh();
+
+            return true;
+        } catch (error) {
+            toast.error((error as Error).message);
+
+            return false;
+        }
+    }
+
     async function placeItem(
         item: DgItem,
         position: TrailerPosition | null,
@@ -392,7 +418,9 @@ export default function LoadingManifest({
                         label="DG map"
                         badge={summary.dg_items.length || undefined}
                         tone={
-                            summary.food_conflicts.length > 0
+                            summary.segregation.issues.some(
+                                (issue) => issue.status !== 'undecided',
+                            )
                                 ? 'danger'
                                 : 'default'
                         }
@@ -456,6 +484,12 @@ export default function LoadingManifest({
                     </div>
 
                     <ClashBanner summary={summary} />
+
+                    <UnitStrip
+                        segregation={summary.segregation}
+                        disabled={closed}
+                        onSelect={setLabelUnit}
+                    />
 
                     <button
                         type="button"
@@ -720,7 +754,7 @@ export default function LoadingManifest({
                 trailerName={trailerInfoProp?.name ?? manifest.manifest_number}
                 items={equipmentItems}
                 counts={counts}
-                clash={summary.food_conflicts.length > 0}
+                clash={summary.segregation.issues.length > 0}
                 onFinish={finishLoading}
             />
 
@@ -755,6 +789,13 @@ export default function LoadingManifest({
                 manifestNumber={manifest.manifest_number}
                 open={consignmentsOpen}
                 onOpenChange={setConsignmentsOpen}
+            />
+
+            <UnitLabelDialog
+                unit={labelUnit}
+                options={loadCategories}
+                onOpenChange={(open) => !open && setLabelUnit(null)}
+                onSave={saveUnitLabels}
             />
 
             <WarningDialog

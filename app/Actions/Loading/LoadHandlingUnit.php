@@ -2,16 +2,15 @@
 
 namespace App\Actions\Loading;
 
-use App\Calculators\DgSegregationChecker;
 use App\Enums\EventType;
 use App\Enums\HandlingUnitStatus;
 use App\Enums\LoadWarningType;
 use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
-use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\ManifestNotOpen;
+use App\Exceptions\Loading\SegregationClash;
 use App\Models\Depot;
 use App\Models\HandlingUnit;
 use App\Models\Manifest;
@@ -19,12 +18,13 @@ use App\Models\ManifestItem;
 use App\Models\OperationalEvent;
 use App\Models\User;
 use App\Models\WarningAcknowledgement;
+use App\Support\Loading\ManifestSegregation;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 class LoadHandlingUnit
 {
-    public function __construct(private readonly DgSegregationChecker $dgChecker) {}
+    public function __construct(private readonly ManifestSegregation $segregation) {}
 
     public function handle(
         Manifest $manifest,
@@ -181,35 +181,21 @@ class LoadHandlingUnit
                 );
             }
 
-            $onThisTrailer = HandlingUnit::query()
-                ->join('manifest_items', 'manifest_items.handling_unit_id', '=', 'handling_units.id')
-                ->where('manifest_items.manifest_id', $lockedManifest->getKey());
+            // Only the problems this pallet would add: freight that was already
+            // in conflict has been dealt with (or acknowledged) by an earlier scan.
+            $segregationIssues = $this->segregation->introducedBy($lockedManifest, $lockedHandlingUnit);
 
-            $existingDgClasses = (clone $onThisTrailer)
-                ->whereNotNull('handling_units.dg_class')
-                ->distinct()
-                ->pluck('handling_units.dg_class')
-                ->all();
-
-            $existingHasFood = (clone $onThisTrailer)
-                ->where('handling_units.is_food', true)
-                ->exists();
-
-            $foodDgConflicts = $lockedHandlingUnit->is_food
-                ? $this->dgChecker->foodConflicts($existingDgClasses, true)
-                : $this->dgChecker->foodConflicts([$lockedHandlingUnit->dg_class], $existingHasFood);
-
-            $foodDgClashAcknowledged = in_array(
-                LoadWarningType::FoodDgClash,
+            $segregationAcknowledged = in_array(
+                LoadWarningType::SegregationClash,
                 $acknowledgedWarnings,
                 true,
             );
 
-            if ($foodDgConflicts !== [] && ! $foodDgClashAcknowledged) {
-                throw new FoodDgClash(
+            if ($segregationIssues !== [] && ! $segregationAcknowledged) {
+                throw new SegregationClash(
                     handlingUnit: $lockedHandlingUnit,
                     selectedManifest: $lockedManifest,
-                    conflictingClasses: $foodDgConflicts,
+                    issues: $segregationIssues,
                 );
             }
 
@@ -253,9 +239,9 @@ class LoadHandlingUnit
                 $acknowledgement->save();
             }
 
-            if ($foodDgConflicts !== []) {
+            if ($segregationIssues !== []) {
                 $acknowledgement = new WarningAcknowledgement;
-                $acknowledgement->warning_type = LoadWarningType::FoodDgClash;
+                $acknowledgement->warning_type = LoadWarningType::SegregationClash;
                 $acknowledgement->handling_unit_id = $lockedHandlingUnit->getKey();
                 $acknowledgement->manifest_id = $lockedManifest->getKey();
                 $acknowledgement->acknowledged_by = $loader->getKey();
@@ -264,7 +250,7 @@ class LoadHandlingUnit
                 $acknowledgement->metadata = [
                     'is_food' => $lockedHandlingUnit->is_food,
                     'dg_class' => $lockedHandlingUnit->dg_class,
-                    'conflicting_classes' => $foodDgConflicts,
+                    'issues' => $segregationIssues,
                 ];
                 $acknowledgement->save();
             }

@@ -31,7 +31,45 @@ export type ManifestSummary = {
     dg: { class: string; count: number }[];
     dg_items: DgItem[];
     food_count: number;
-    food_conflicts: string[];
+    segregation: Segregation;
+};
+
+export type SegregationStatus = 'clash' | 'undecided' | 'unavoidable';
+
+export type SegregationIssue = {
+    a: string;
+    b: string;
+    a_label: string;
+    b_label: string;
+    status: SegregationStatus;
+    // Units (A = 1, B = 2, ...) the two share. Empty unless it is a clash.
+    units: number[];
+    unit_names: string[];
+    reason: string | null;
+};
+
+export type UnitCategory = {
+    key: string;
+    label: string;
+    // Where we know it from: a loader's label, a pallet placed on the map, or both.
+    source: 'label' | 'placed' | 'both';
+};
+
+export type TrailerUnitState = {
+    unit: number;
+    name: string;
+    categories: UnitCategory[];
+};
+
+export type Segregation = {
+    units: TrailerUnitState[];
+    issues: SegregationIssue[];
+};
+
+export type LoadCategoryOption = {
+    key: string;
+    label: string;
+    kind: 'dg' | 'other';
 };
 
 export type ConsignmentState =

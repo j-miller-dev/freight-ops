@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Loading;
 use App\Enums\TrailerType;
 use App\Http\Controllers\Controller;
 use App\Models\Manifest;
+use App\Support\Loading\LoadCategories;
 use App\Support\Loading\ManifestConsignmentBoard;
 use App\Support\Loading\ManifestEquipmentCounts;
 use App\Support\Loading\ManifestSummary;
@@ -51,6 +52,7 @@ class ShowManifestController extends Controller
             'equipment' => $equipment->for($manifest),
             'equipment_items' => ManifestEquipmentCounts::items(),
             'summary' => $summary->for($manifest),
+            'load_categories' => LoadCategories::options(),
             'bay_code' => $board->bayFor($manifest)?->code,
             'trailer_types' => array_map(fn (TrailerType $type): array => [
                 'value' => $type->value,

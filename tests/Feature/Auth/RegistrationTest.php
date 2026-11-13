@@ -36,4 +36,20 @@ class RegistrationTest extends TestCase
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
     }
+
+    public function test_registration_is_refused_while_public_sign_up_is_switched_off()
+    {
+        config(['fortify.allow_registration' => false]);
+
+        $this->get(route('register'))->assertNotFound();
+
+        $this->post(route('register.store'), [
+            'name' => 'Intruder',
+            'email' => 'intruder@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ])->assertNotFound();
+
+        $this->assertGuest();
+    }
 }

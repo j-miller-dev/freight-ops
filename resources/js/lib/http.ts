@@ -58,7 +58,7 @@ export async function getJson<T>(
 }
 
 async function sendJson<T>(
-    method: 'POST' | 'PATCH' | 'DELETE',
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     url: string,
     body?: unknown,
 ): Promise<T> {
@@ -85,6 +85,9 @@ async function sendJson<T>(
 
 export const patchJson = <T>(url: string, body: unknown) =>
     sendJson<T>('PATCH', url, body);
+
+export const putJson = <T>(url: string, body: unknown) =>
+    sendJson<T>('PUT', url, body);
 
 export const postJson = <T>(url: string, body?: unknown) =>
     sendJson<T>('POST', url, body);

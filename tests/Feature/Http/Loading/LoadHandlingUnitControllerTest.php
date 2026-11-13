@@ -328,7 +328,7 @@ it('counts only this consignment when reporting pallets on the selected manifest
         ->assertJsonPath('error.details.on_selected_after_scan', 2);
 });
 
-it('shows food/DG clash details', function () {
+it('shows segregation clash details', function () {
     $loader = User::factory()->create();
     $destination = Depot::factory()->create();
     $manifest = loadingManifest($destination);
@@ -354,9 +354,9 @@ it('shows food/DG clash details', function () {
     );
 
     $response->assertStatus(422)
-        ->assertJsonPath('error.code', 'food_dg_clash')
-        ->assertJsonPath('error.details.is_food', false)
-        ->assertJsonPath('error.details.dg_class', '8')
-        ->assertJsonPath('error.details.conflicting_classes', ['8'])
+        ->assertJsonPath('error.code', 'segregation_clash')
+        ->assertJsonPath('error.details.issues.0.status', 'undecided')
+        ->assertJsonPath('error.details.issues.0.a_label', 'Food')
+        ->assertJsonPath('error.details.issues.0.b_label', 'Class 8')
         ->assertJsonPath('error.details.manifest_number', $manifest->manifest_number);
 });

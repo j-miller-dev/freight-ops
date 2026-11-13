@@ -160,9 +160,22 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Public registration
+    |--------------------------------------------------------------------------
+    |
+    | Off unless FORTIFY_REGISTRATION=true (local dev and the tests turn it on).
+    | While off, requests to /register are refused by BlockRegistrationWhenDisabled.
+    |
+    */
+
+    'allow_registration' => (bool) env('FORTIFY_REGISTRATION', false),
+
     'features' => [
-        // Public sign-up is off unless FORTIFY_REGISTRATION=true (local dev and tests turn it on).
-        ...(env('FORTIFY_REGISTRATION', false) ? [Features::registration()] : []),
+        // The route stays defined either way: the front end build generates its
+        // route helpers from it. Whether sign-up is open is 'allow_registration'.
+        Features::registration(),
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([

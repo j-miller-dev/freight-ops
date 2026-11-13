@@ -1,5 +1,5 @@
-import { Apple, TriangleAlert } from 'lucide-react';
-import DgDiamond from '@/components/loading/dg-diamond';
+import { TriangleAlert } from 'lucide-react';
+import CategoryIcon from '@/components/loading/category-icon';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -99,38 +99,46 @@ export default function WarningDialog({
                     </div>
                 )}
 
-                {warning?.code === 'food_dg_clash' && details && (
+                {warning?.code === 'segregation_clash' && details && (
                     <div className="space-y-3 text-sm">
-                        <div className="flex items-center gap-2">
-                            {details.is_food ? (
-                                <Apple className="size-6 text-success" />
-                            ) : (
-                                <DgDiamond
-                                    cls={String(details.dg_class)}
-                                    size={28}
-                                />
-                            )}
-                            <span className="text-muted-foreground">
-                                conflicts with
-                            </span>
-                            {details.is_food ? (
-                                (details.conflicting_classes as string[]).map(
-                                    (cls) => (
-                                        <DgDiamond
-                                            key={cls}
-                                            cls={cls}
-                                            size={28}
-                                        />
-                                    ),
-                                )
-                            ) : (
-                                <Apple className="size-6 text-success" />
-                            )}
-                        </div>
+                        <ul className="space-y-2">
+                            {(
+                                details.issues as Array<{
+                                    a: string;
+                                    b: string;
+                                    a_label: string;
+                                    b_label: string;
+                                    status: string;
+                                    unit_names: string[];
+                                    reason: string | null;
+                                }>
+                            ).map((issue) => (
+                                <li
+                                    key={`${issue.a}-${issue.b}`}
+                                    className="flex items-center gap-2"
+                                >
+                                    <CategoryIcon
+                                        category={issue.a}
+                                        size={28}
+                                    />
+                                    <span className="text-muted-foreground">
+                                        must not travel with
+                                    </span>
+                                    <CategoryIcon
+                                        category={issue.b}
+                                        size={28}
+                                    />
+                                    <span className="font-medium">
+                                        {issue.a_label} / {issue.b_label}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
                         <p className="text-muted-foreground">
-                            Already on {String(details.manifest_number)}.
-                            Dangerous goods and food should not share a trailer
-                            unless cleared by your supervisor.
+                            On {String(details.manifest_number)}. Label which
+                            part of the trailer carries each (tap A or B on the
+                            manifest page) to clear this, or continue if your
+                            supervisor has cleared it.
                         </p>
                     </div>
                 )}

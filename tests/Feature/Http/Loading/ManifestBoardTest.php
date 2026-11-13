@@ -66,7 +66,9 @@ it('summarises DG classes, food and clashes on a trailer', function () {
         ->assertJsonPath('data.loaded_count', 3)
         ->assertJsonPath('data.food_count', 1)
         ->assertJsonPath('data.dg', [['class' => '3', 'count' => 1], ['class' => '8', 'count' => 1]])
-        ->assertJsonPath('data.food_conflicts', ['8']);
+        ->assertJsonCount(1, 'data.segregation.issues')
+        ->assertJsonPath('data.segregation.issues.0.b', '8')
+        ->assertJsonPath('data.segregation.issues.0.status', 'undecided');
 });
 
 it('classifies each consignment by where its remaining pieces are', function () {

@@ -3,16 +3,17 @@
 use App\Exceptions\Loading\ClientEventConflict;
 use App\Exceptions\Loading\ConsignmentSplit;
 use App\Exceptions\Loading\DestinationMismatch;
-use App\Exceptions\Loading\FoodDgClash;
 use App\Exceptions\Loading\HandlingUnitAlreadyAssigned;
 use App\Exceptions\Loading\HandlingUnitNotOnManifest;
 use App\Exceptions\Loading\ManifestNotOpen;
 use App\Exceptions\Loading\ManifestNotReadyToClose;
+use App\Exceptions\Loading\SegregationClash;
 use App\Exceptions\Unload\DirectionChanged;
 use App\Exceptions\Unload\HandlingUnitAlreadyLoaded;
 use App\Exceptions\Unload\HandlingUnitNotHeld;
 use App\Exceptions\Unload\NoBayForDestination;
 use App\Exceptions\Unload\UnloadEventConflict;
+use App\Http\Middleware\BlockRegistrationWhenDisabled;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
 
         $middleware->web(append: [
+            BlockRegistrationWhenDisabled::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
@@ -144,14 +146,12 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status' => 409,
                 ],
 
-                $exception instanceof FoodDgClash => [
-                    'code' => 'food_dg_clash',
+                $exception instanceof SegregationClash => [
+                    'code' => 'segregation_clash',
                     'message' => $exception->getMessage(),
                     'status' => 422,
                     'details' => [
-                        'is_food' => $exception->handlingUnit->is_food,
-                        'dg_class' => $exception->handlingUnit->dg_class,
-                        'conflicting_classes' => $exception->conflictingClasses,
+                        'issues' => $exception->issues,
                         'manifest_number' => $exception->selectedManifest->manifest_number,
                     ],
                 ],

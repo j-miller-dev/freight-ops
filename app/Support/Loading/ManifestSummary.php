@@ -2,7 +2,6 @@
 
 namespace App\Support\Loading;
 
-use App\Calculators\DgSegregationChecker;
 use App\Models\HandlingUnit;
 use App\Models\Manifest;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 /** What a loader needs to see at a glance about the freight already on a trailer. */
 class ManifestSummary
 {
-    public function __construct(private readonly DgSegregationChecker $checker) {}
+    public function __construct(private readonly ManifestSegregation $segregation) {}
 
     /**
      * @return array{
@@ -20,7 +19,7 @@ class ManifestSummary
      *     dg: list<array{class: string, count: int}>,
      *     dg_items: list<array<string, mixed>>,
      *     food_count: int,
-     *     food_conflicts: list<string>,
+     *     segregation: array{units: list<array<string, mixed>>, issues: list<array<string, mixed>>},
      * }
      */
     public function for(Manifest $manifest): array
@@ -96,10 +95,7 @@ class ManifestSummary
             'dg_items' => $dgItems,
             'dg' => $dg,
             'food_count' => $foodCount,
-            'food_conflicts' => $this->checker->foodConflicts(
-                array_column($dg, 'class'),
-                $foodCount > 0,
-            ),
+            'segregation' => $this->segregation->for($manifest),
         ];
     }
 }

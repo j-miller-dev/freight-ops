@@ -1,22 +1,55 @@
 import { Apple, TriangleAlert } from 'lucide-react';
 import DgDiamond from '@/components/loading/dg-diamond';
 import { cn } from '@/lib/utils';
-import type { ManifestSummary } from '@/types/loading';
+import type { ManifestSummary, SegregationIssue } from '@/types/loading';
 
+function describe(issue: SegregationIssue): string {
+    const pair = `${issue.a_label} and ${issue.b_label}`;
+
+    switch (issue.status) {
+        case 'clash':
+            return `${pair} are both on trailer ${issue.unit_names.join(' and ')}. They must not travel together.`;
+        case 'unavoidable':
+            return `${pair} must be kept apart, but there is no part of the trailer left for one of them.`;
+        default:
+            return `${pair} are both on this trailer. Tap A or B below to say where each one is.`;
+    }
+}
+
+// Clashes and "no room to separate" are red; "nobody has said which unit is
+// which yet" is amber, since it is fixed by labelling a unit.
 export function ClashBanner({ summary }: { summary: ManifestSummary }) {
-    if (summary.food_conflicts.length === 0) {
+    const { issues } = summary.segregation;
+
+    if (issues.length === 0) {
         return null;
     }
 
     return (
-        <p
-            role="alert"
-            className="mb-4 flex items-center gap-3 rounded-2xl bg-destructive px-4 py-3 text-base font-semibold text-white"
-        >
-            <TriangleAlert className="size-6 shrink-0" />
-            Food on board with class {summary.food_conflicts.join(' and ')}.
-            These must not travel together.
-        </p>
+        <div className="mb-4 space-y-2">
+            {issues.map((issue) => (
+                <p
+                    key={`${issue.a}-${issue.b}-${issue.status}`}
+                    role="alert"
+                    className={cn(
+                        'flex items-center gap-3 rounded-2xl px-4 py-3 text-base font-semibold',
+                        issue.status === 'undecided'
+                            ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
+                            : 'bg-destructive text-white',
+                    )}
+                >
+                    <TriangleAlert className="size-6 shrink-0" />
+                    <span>
+                        {describe(issue)}
+                        {issue.reason && (
+                            <span className="block text-sm font-normal opacity-90">
+                                {issue.reason}
+                            </span>
+                        )}
+                    </span>
+                </p>
+            ))}
+        </div>
     );
 }
 
