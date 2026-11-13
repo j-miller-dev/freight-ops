@@ -16,6 +16,9 @@ type Props = {
     busy: boolean;
     onConfirm: () => void;
     onCancel: () => void;
+    // Defaults suit a scan; placing a pallet on the trailer map overrides them.
+    title?: string;
+    confirmLabel?: string;
 };
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -32,6 +35,8 @@ export default function WarningDialog({
     busy,
     onConfirm,
     onCancel,
+    title = 'Check before loading',
+    confirmLabel,
 }: Props) {
     const details = warning?.details;
 
@@ -44,7 +49,7 @@ export default function WarningDialog({
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl">
                         <TriangleAlert className="size-6 text-warning" />
-                        Check before loading
+                        {title}
                     </DialogTitle>
                     <DialogDescription className="text-base">
                         {warning?.message}
@@ -135,10 +140,9 @@ export default function WarningDialog({
                             ))}
                         </ul>
                         <p className="text-muted-foreground">
-                            On {String(details.manifest_number)}. Label which
-                            part of the trailer carries each (tap A or B on the
-                            manifest page) to clear this, or continue if your
-                            supervisor has cleared it.
+                            {details.placement
+                                ? `Put it on a different part of the trailer, or place it here anyway if your supervisor has cleared it.`
+                                : `On ${String(details.manifest_number)}. Label which part of the trailer carries each (tap A or B on the manifest page) to clear this, or continue if your supervisor has cleared it.`}
                         </p>
                     </div>
                 )}
@@ -179,9 +183,11 @@ export default function WarningDialog({
                     >
                         {busy
                             ? 'Confirming…'
-                            : warning?.code === 'handling_unit_already_assigned'
-                              ? 'Move and load here'
-                              : 'Acknowledge and load'}
+                            : (confirmLabel ??
+                              (warning?.code ===
+                              'handling_unit_already_assigned'
+                                  ? 'Move and load here'
+                                  : 'Acknowledge and load'))}
                     </Button>
                 </DialogFooter>
             </DialogContent>

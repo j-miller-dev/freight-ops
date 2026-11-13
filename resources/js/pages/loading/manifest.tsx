@@ -42,8 +42,15 @@ import { useEquipment } from '@/hooks/use-equipment';
 import { useManifestPresence } from '@/hooks/use-manifest-presence';
 import { useManifestScanOff } from '@/hooks/use-manifest-scan-off';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
+import type { WarningPrompt } from '@/hooks/use-manifest-scanner';
 import { useManifestSummary } from '@/hooks/use-manifest-summary';
-import { deleteJson, patchJson, postJson, putJson } from '@/lib/http';
+import {
+    deleteJson,
+    HttpError,
+    patchJson,
+    postJson,
+    putJson,
+} from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type {
     ClosedState,
@@ -108,6 +115,13 @@ export default function LoadingManifest({
     const [consignmentsOpen, setConsignmentsOpen] = useState(false);
     const [nextUpOpen, setNextUpOpen] = useState(false);
     const [labelUnit, setLabelUnit] = useState<TrailerUnitState | null>(null);
+    // A placement on the map that would break a rule, waiting for a yes or no.
+    const [placementClash, setPlacementClash] = useState<{
+        item: DgItem;
+        position: TrailerPosition;
+        prompt: WarningPrompt;
+    } | null>(null);
+    const [placing, setPlacing] = useState(false);
     const { summary, refresh } = useManifestSummary(
         manifest.id,
         initialSummary,
@@ -281,20 +295,67 @@ export default function LoadingManifest({
     async function placeItem(
         item: DgItem,
         position: TrailerPosition | null,
+        acknowledged = false,
     ): Promise<boolean> {
         try {
             await patchJson(
                 `/loading/manifests/${manifest.id}/pallets/${item.id}/position`,
-                position ?? { unit: null, row: null, side: null },
+                {
+                    ...(position ?? { unit: null, row: null, side: null }),
+                    ...(acknowledged
+                        ? { acknowledged_warnings: ['segregation_clash'] }
+                        : {}),
+                },
             );
             await refresh();
 
             return true;
         } catch (error) {
-            toast.error((error as Error).message);
+            if (
+                position &&
+                error instanceof HttpError &&
+                error.code === 'segregation_clash'
+            ) {
+                setPlacementClash({
+                    item,
+                    position,
+                    prompt: {
+                        barcode: item.barcode,
+                        clientEventId: '',
+                        occurredAt: '',
+                        acknowledgedWarnings: [],
+                        code: 'segregation_clash',
+                        message: error.message,
+                        details: { ...error.details, placement: true },
+                    },
+                });
+            } else {
+                toast.error((error as Error).message);
+            }
 
             return false;
         }
+    }
+
+    async function confirmPlacementClash() {
+        if (!placementClash) {
+            return;
+        }
+
+        setPlacing(true);
+
+        if (
+            await placeItem(placementClash.item, placementClash.position, true)
+        ) {
+            // Same as a clean placement of the pallet that was just scanned.
+            if (justLoaded && placementClash.item.id === justLoaded.id) {
+                handleMapOpenChange(false);
+            }
+
+            setPlacementClash(null);
+        }
+
+        setPlacing(false);
     }
 
     async function finishLoading(equipment: EquipmentCounts): Promise<boolean> {
@@ -803,6 +864,15 @@ export default function LoadingManifest({
                 busy={scanner.scanning}
                 onConfirm={scanner.confirmWarning}
                 onCancel={scanner.dismissWarning}
+            />
+
+            <WarningDialog
+                warning={placementClash?.prompt ?? null}
+                busy={placing}
+                title="Check before placing"
+                confirmLabel="Place anyway"
+                onConfirm={() => void confirmPlacementClash()}
+                onCancel={() => setPlacementClash(null)}
             />
 
             <CloseManifestDialog

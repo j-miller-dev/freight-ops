@@ -6,6 +6,7 @@ export class HttpError extends Error {
         message: string,
         readonly status: number,
         readonly code: string | null = null,
+        readonly details: Record<string, unknown> | null = null,
     ) {
         super(message);
     }
@@ -23,16 +24,18 @@ async function fail(response: Response): Promise<never> {
 
     let message = `Request failed (${response.status})`;
     let code: string | null = null;
+    let details: Record<string, unknown> | null = null;
 
     try {
         const json = await response.json();
         message = json.error?.message ?? json.message ?? message;
         code = json.error?.code ?? null;
+        details = json.error?.details ?? null;
     } catch {
         // Not JSON; keep the generic message.
     }
 
-    throw new HttpError(message, response.status, code);
+    throw new HttpError(message, response.status, code, details);
 }
 
 const JSON_HEADERS = {

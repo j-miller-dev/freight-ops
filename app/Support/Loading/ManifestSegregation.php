@@ -22,8 +22,12 @@ class ManifestSegregation
      *     issues: list<array{a: string, b: string, a_label: string, b_label: string, status: string, units: list<int>, unit_names: list<string>, reason: string|null}>,
      * }
      */
-    public function for(Manifest $manifest, ?HandlingUnit $adding = null): array
-    {
+    public function for(
+        Manifest $manifest,
+        ?HandlingUnit $adding = null,
+        ?HandlingUnit $placing = null,
+        ?int $placingUnit = null,
+    ): array {
         $unitCount = count($manifest->trailer_type->rows());
 
         $present = [];
@@ -34,15 +38,20 @@ class ManifestSegregation
         $pallets = DB::table('manifest_items')
             ->join('handling_units', 'handling_units.id', '=', 'manifest_items.handling_unit_id')
             ->where('manifest_items.manifest_id', $manifest->getKey())
-            ->get(['handling_units.dg_class', 'handling_units.is_food', 'manifest_items.trailer_unit']);
+            ->get(['handling_units.id', 'handling_units.dg_class', 'handling_units.is_food', 'manifest_items.trailer_unit']);
 
         foreach ($pallets as $pallet) {
+            // "What if this pallet were placed on that unit?" overrides where it is now.
+            $unit = $placing !== null && $pallet->id === $placing->getKey()
+                ? $placingUnit
+                : ($pallet->trailer_unit === null ? null : (int) $pallet->trailer_unit);
+
             foreach (LoadCategories::forPallet($pallet->dg_class, (bool) $pallet->is_food) as $category) {
                 $present[] = $category;
 
-                if ($pallet->trailer_unit !== null) {
-                    $pinned[$category][] = (int) $pallet->trailer_unit;
-                    $sources[(int) $pallet->trailer_unit][$category]['placed'] = true;
+                if ($unit !== null) {
+                    $pinned[$category][] = $unit;
+                    $sources[$unit][$category]['placed'] = true;
                 }
             }
         }
@@ -108,6 +117,22 @@ class ManifestSegregation
 
         return array_values(array_filter(
             $this->for($manifest, $handlingUnit)['issues'],
+            fn (array $issue): bool => ! in_array($this->signature($issue), $before, true),
+        ));
+    }
+
+    /**
+     * The problems that placing this already-loaded pallet on a unit would
+     * add, so the loader is warned about what they are about to cause.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function introducedByPlacement(Manifest $manifest, HandlingUnit $handlingUnit, int $unit): array
+    {
+        $before = array_map($this->signature(...), $this->for($manifest)['issues']);
+
+        return array_values(array_filter(
+            $this->for($manifest, placing: $handlingUnit, placingUnit: $unit)['issues'],
             fn (array $issue): bool => ! in_array($this->signature($issue), $before, true),
         ));
     }
