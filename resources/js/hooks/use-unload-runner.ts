@@ -19,6 +19,7 @@ export type ConsignmentProgress = {
 
 export type BayDirection = {
     handling_unit_id: string;
+    consignment_id: string;
     barcode: string;
     piece_number: number;
     connote_number: string;

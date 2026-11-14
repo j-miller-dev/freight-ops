@@ -24,3 +24,26 @@ export type HoldingLanePallet = {
     reasons: string[];
     released: boolean;
 };
+
+// One consignment's progress into its bay, for the runner's guide.
+export type ConsignmentPillData = {
+    id: string;
+    connote_number: string;
+    sender_name: string | null;
+    item_count: number;
+    in_bay: number;
+    held: number;
+    // Already on a trailer, so no longer in the yard.
+    loaded: number;
+    // Not in the bay, not held, not loaded: still to be found and placed.
+    out_there: number;
+    placed_share: number;
+};
+
+export type BayBoard = {
+    bay: { code: string; name: string } | null;
+    current: ConsignmentPillData;
+    others: ConsignmentPillData[];
+    complete_count: number;
+    in_progress_count: number;
+};

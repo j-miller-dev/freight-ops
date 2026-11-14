@@ -21,6 +21,7 @@ class DirectionPayload
 
         return [
             'handling_unit_id' => $handlingUnit->getKey(),
+            'consignment_id' => $consignment->getKey(),
             'barcode' => $handlingUnit->barcode,
             'piece_number' => $handlingUnit->piece_number,
             'connote_number' => $consignment->connote_number,

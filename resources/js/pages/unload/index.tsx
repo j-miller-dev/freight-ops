@@ -15,35 +15,18 @@ import OutboxBanners from '@/components/outbox-banners';
 import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import BayGuide from '@/components/unload/bay-guide';
+import ConsignmentProgress from '@/components/unload/consignment-progress';
 import HoldingDialog from '@/components/unload/holding-dialog';
 import HoldingLaneDialog from '@/components/unload/holding-lane-dialog';
 import HoldingLanesStrip from '@/components/unload/holding-lanes-strip';
 import WarehouseMapDialog from '@/components/unload/warehouse-map-dialog';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
+import { useBayBoard } from '@/hooks/use-bay-board';
 import { useHoldingLanes } from '@/hooks/use-holding-lanes';
 import { useUnloadRunner } from '@/hooks/use-unload-runner';
-import type { ConsignmentProgress } from '@/hooks/use-unload-runner';
 import { cn } from '@/lib/utils';
 import type { HoldingLane } from '@/types/unload';
-
-function progressMessage({
-    item_count,
-    in_bay,
-    held,
-    all_placed,
-}: ConsignmentProgress): string {
-    const heldNote = held > 0 ? `${held} held` : null;
-
-    if (all_placed) {
-        return [`All ${item_count} items placed`, heldNote]
-            .filter(Boolean)
-            .join(' · ');
-    }
-
-    return [`${in_bay} of ${item_count} in bay`, heldNote]
-        .filter(Boolean)
-        .join(' · ');
-}
 
 export default function Unload() {
     const runner = useUnloadRunner();
@@ -61,6 +44,12 @@ export default function Unload() {
     const [acknowledgedId, setAcknowledgedId] = useState<string | null>(null);
     const [pickingLane, setPickingLane] = useState(false);
     const { direction, stage, override } = runner;
+    const board = useBayBoard(
+        direction?.consignment_id ?? null,
+        `${stage}-${runner.queued}`,
+    );
+    // The pill is about the destination bay, even when this pallet is held.
+    const destinationBay = board?.bay?.code ?? direction?.bay.code ?? 'the bay';
     const lane = override?.lane ?? direction?.bay.lane ?? null;
     const code = override?.code ?? direction?.bay.code;
     const dropTarget =
@@ -329,6 +318,17 @@ export default function Unload() {
                         )}
                     </div>
 
+                    <ConsignmentProgress
+                        itemCount={direction.item_count}
+                        inBay={
+                            board?.current.in_bay ?? direction.progress.in_bay
+                        }
+                        held={board?.current.held ?? direction.progress.held}
+                        loaded={board?.current.loaded}
+                        bayCode={destinationBay}
+                        placing={!direction.bay.is_holding}
+                    />
+
                     {runner.error && <AlertError errors={[runner.error]} />}
 
                     <div className="flex gap-2">
@@ -366,6 +366,10 @@ export default function Unload() {
                 </section>
             )}
 
+            {(stage === 'directed' || stage === 'dropped') && (
+                <BayGuide board={board} />
+            )}
+
             <HoldingDialog
                 direction={needsHoldNotice ? direction : null}
                 onAcknowledge={() =>
@@ -397,18 +401,21 @@ export default function Unload() {
                                 Saved on this device. It will send when you are
                                 back online.
                             </p>
-                        ) : (
-                            <p
-                                className={
-                                    direction.progress.all_placed
-                                        ? 'text-lg font-semibold text-success'
-                                        : 'text-lg text-muted-foreground'
-                                }
-                            >
-                                {progressMessage(direction.progress)}
-                            </p>
-                        )}
+                        ) : null}
                     </div>
+
+                    {!runner.queued && (
+                        <ConsignmentProgress
+                            itemCount={direction.item_count}
+                            // The confirm response already counts this pallet;
+                            // the guide may still be a moment behind.
+                            inBay={direction.progress.in_bay}
+                            held={direction.progress.held}
+                            loaded={board?.current.loaded}
+                            bayCode={destinationBay}
+                        />
+                    )}
+
                     <Button
                         type="button"
                         size="xl"
