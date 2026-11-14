@@ -30,6 +30,7 @@ import TrailerAlerts, {
 } from '@/components/loading/trailer-alerts';
 import TrailerDialog from '@/components/loading/trailer-dialog';
 import TrailerMapDialog from '@/components/loading/trailer-map-dialog';
+import UnitHeadsUpDialog from '@/components/loading/unit-heads-up-dialog';
 import UnitLabelDialog from '@/components/loading/unit-label-dialog';
 import UnitStrip from '@/components/loading/unit-strip';
 import WarningDialog from '@/components/loading/warning-dialog';
@@ -45,6 +46,7 @@ import { useManifestScanOff } from '@/hooks/use-manifest-scan-off';
 import { useManifestScanner } from '@/hooks/use-manifest-scanner';
 import type { WarningPrompt } from '@/hooks/use-manifest-scanner';
 import { useManifestSummary } from '@/hooks/use-manifest-summary';
+import { useUnitNoticeToasts } from '@/hooks/use-unit-notice-toasts';
 import {
     deleteJson,
     HttpError,
@@ -107,7 +109,8 @@ export default function LoadingManifest({
     const scanner = useManifestScanner(manifest.id);
     const videoRef = useRef<HTMLVideoElement>(null);
     const removal = useManifestScanOff(manifest.id);
-    const others = useManifestPresence(manifest.id);
+    const { others, notices, entryNotices } = useManifestPresence(manifest.id);
+    const [headsUpSeen, setHeadsUpSeen] = useState(false);
     const [scanOffMode, setScanOffMode] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const [keyboard, setKeyboard] = useState(false);
@@ -128,6 +131,7 @@ export default function LoadingManifest({
         initialSummary,
         scanner.result,
     );
+    useUnitNoticeToasts(notices, summary.segregation);
     const trailerInfo =
         trailerTypes.find((type) => type.value === trailer) ?? trailerTypes[0];
 
@@ -843,6 +847,11 @@ export default function LoadingManifest({
                 value={trailer}
                 onOpenChange={setTrailerOpen}
                 onChange={(value) => void chooseTrailer(value)}
+            />
+
+            <UnitHeadsUpDialog
+                notices={headsUpSeen ? [] : (entryNotices ?? [])}
+                onDismiss={() => setHeadsUpSeen(true)}
             />
 
             <TrailerMapDialog

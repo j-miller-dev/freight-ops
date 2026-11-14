@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Manifest;
 use App\Models\ManifestItem;
 use App\Models\ManifestPresence;
+use App\Support\Loading\ManifestSegregation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -17,7 +18,7 @@ class ManifestPresenceController extends Controller
      * and answer with who else has been here recently. There is no websocket
      * service in production, so the page just asks again every few seconds.
      */
-    public function __invoke(Request $request, Manifest $manifest): JsonResponse
+    public function __invoke(Request $request, Manifest $manifest, ManifestSegregation $segregation): JsonResponse
     {
         Gate::authorize('load', $manifest);
 
@@ -59,6 +60,9 @@ class ManifestPresenceController extends Controller
                     'loaded_count' => (int) ($loadedBy[$presence->user_id] ?? 0),
                 ])
                 ->values(),
+            // Riding along on the heartbeat so other loaders hear when a
+            // dangerous or food load lands on a unit, without another poll.
+            'unit_notices' => $segregation->notable($manifest),
         ]);
     }
 }

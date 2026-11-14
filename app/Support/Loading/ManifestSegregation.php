@@ -106,6 +106,45 @@ class ManifestSegregation
     }
 
     /**
+     * What crew members need to plan around: the units carrying a category
+     * that some rule keeps apart from something else, with what to keep off
+     * that unit. Categories no rule cares about (say, a class 9) are left out.
+     *
+     * @return list<array{unit: int, name: string, categories: list<array{key: string, label: string, avoid: list<string>}>}>
+     */
+    public function notable(Manifest $manifest): array
+    {
+        $avoid = [];
+
+        foreach ($this->rules() as $rule) {
+            $avoid[$rule['a']][] = LoadCategories::label($rule['b']);
+            $avoid[$rule['b']][] = LoadCategories::label($rule['a']);
+        }
+
+        $notable = [];
+
+        foreach ($this->for($manifest)['units'] as $unit) {
+            $categories = [];
+
+            foreach ($unit['categories'] as $category) {
+                if (isset($avoid[$category['key']])) {
+                    $categories[] = [
+                        'key' => $category['key'],
+                        'label' => $category['label'],
+                        'avoid' => array_values(array_unique($avoid[$category['key']])),
+                    ];
+                }
+            }
+
+            if ($categories !== []) {
+                $notable[] = ['unit' => $unit['unit'], 'name' => $unit['name'], 'categories' => $categories];
+            }
+        }
+
+        return $notable;
+    }
+
+    /**
      * The problems that loading this pallet would add, so a loader is warned
      * about what they are about to cause and not about what is already there.
      *

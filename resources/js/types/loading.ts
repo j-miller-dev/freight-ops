@@ -189,3 +189,11 @@ export type NextUpList = {
         departs_at: string | null;
     };
 };
+
+// A unit carrying something a rule keeps apart from something else, with what
+// to keep off that unit. Sent to every loader on the manifest.
+export type UnitNotice = {
+    unit: number;
+    name: string;
+    categories: { key: string; label: string; avoid: string[] }[];
+};
