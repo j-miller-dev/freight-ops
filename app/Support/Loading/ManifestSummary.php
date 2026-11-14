@@ -69,6 +69,7 @@ class ManifestSummary
                 'manifest_items.trailer_unit',
                 'manifest_items.trailer_row',
                 'manifest_items.trailer_side',
+                'manifest_items.trailer_level',
             ])
             ->map(fn (object $row): array => [
                 'id' => $row->id,
@@ -82,6 +83,7 @@ class ManifestSummary
                     'unit' => (int) $row->trailer_unit,
                     'row' => (int) $row->trailer_row,
                     'side' => $row->trailer_side,
+                    'level' => (int) ($row->trailer_level ?? 1),
                 ],
             ])
             ->all());

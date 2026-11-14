@@ -24,5 +24,9 @@ export function positionLabel(
     unitCount: number,
     position: TrailerPosition,
 ): string {
-    return `${unitName(unitCount, position.unit - 1)} · row ${position.row} · ${sideName(position.side)}`;
+    return `${unitName(unitCount, position.unit - 1)} · row ${position.row} · ${sideName(position.side)} · ${levelName(position.level)}`;
+}
+
+export function levelName(level: TrailerPosition['level']): string {
+    return level === 2 ? 'top' : 'floor';
 }

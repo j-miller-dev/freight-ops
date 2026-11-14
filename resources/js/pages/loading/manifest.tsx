@@ -38,6 +38,7 @@ import PageHeader from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBarcodeCamera } from '@/hooks/use-barcode-camera';
+import { useDgMapAutoOpen } from '@/hooks/use-dg-map-auto-open';
 import { useEquipment } from '@/hooks/use-equipment';
 import { useManifestPresence } from '@/hooks/use-manifest-presence';
 import { useManifestScanOff } from '@/hooks/use-manifest-scan-off';
@@ -134,13 +135,30 @@ export default function LoadingManifest({
     // demand from the "On board" tile. It is derived from the scan result, so
     // dismissing it only suppresses that one pallet.
     const [mapOpen, setMapOpen] = useState(false);
+    const [mapAutoOpen, setMapAutoOpen] = useDgMapAutoOpen();
     const [dismissedFor, setDismissedFor] = useState<string | null>(null);
     const [activeId, setActiveId] = useState<string | null>(null);
     const scanned = scanner.result?.dgClass ? scanner.result : null;
     const scannedId = scanned?.handlingUnitId ?? null;
     const autoOpen =
-        scannedId !== null && dismissedFor !== scannedId && !scanner.warning;
+        mapAutoOpen &&
+        scannedId !== null &&
+        dismissedFor !== scannedId &&
+        !scanner.warning;
     const mapVisible = mapOpen || autoOpen;
+
+    // With auto-open off, a quiet nudge instead of the map: the loader places
+    // the pallet from the DG tile whenever they like.
+    useEffect(() => {
+        if (mapAutoOpen || !scannedId) {
+            return;
+        }
+
+        toast.info('Dangerous goods loaded', {
+            description: 'Place it on the trailer map when you are ready.',
+            action: { label: 'Place', onClick: () => setMapOpen(true) },
+        });
+    }, [mapAutoOpen, scannedId]);
 
     // The pallet that was just scanned may not be in the summary yet.
     const justLoaded: DgItem | null =
@@ -836,6 +854,8 @@ export default function LoadingManifest({
                 onActiveChange={setActiveId}
                 onPlace={placeItem}
                 justLoaded={autoOpen ? justLoaded : null}
+                autoOpen={mapAutoOpen}
+                onAutoOpenChange={setMapAutoOpen}
             />
 
             <NextUpSheet

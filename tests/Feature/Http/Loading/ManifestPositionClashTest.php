@@ -61,7 +61,7 @@ it('places it and records who acknowledged the clash when confirmed', function (
             'acknowledged_warnings' => ['segregation_clash'],
         ])
         ->assertOk()
-        ->assertJsonPath('data.position', ['unit' => 1, 'row' => 1, 'side' => 'D']);
+        ->assertJsonPath('data.position', ['unit' => 1, 'row' => 1, 'side' => 'D', 'level' => 1]);
 
     $acknowledgement = WarningAcknowledgement::query()->sole();
 

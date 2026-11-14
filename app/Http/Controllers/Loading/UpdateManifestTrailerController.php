@@ -28,7 +28,7 @@ class UpdateManifestTrailerController extends Controller
             // Positions belong to the old layout, so they no longer mean anything.
             $cleared = $manifest->manifestItems()
                 ->whereNotNull('trailer_unit')
-                ->update(['trailer_unit' => null, 'trailer_row' => null, 'trailer_side' => null]);
+                ->update(['trailer_unit' => null, 'trailer_row' => null, 'trailer_side' => null, 'trailer_level' => null]);
 
             // Labels on units the new layout does not have would never be seen.
             ManifestUnitLabel::query()

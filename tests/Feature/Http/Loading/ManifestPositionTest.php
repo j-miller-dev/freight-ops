@@ -37,7 +37,7 @@ it('places a DG pallet on the trailer and reports it in the summary', function (
 
     $this->patchJson(route('loading.manifest.position', [$manifest, $pallet]), ['unit' => 2, 'row' => 10, 'side' => 'D'])
         ->assertOk()
-        ->assertJsonPath('data.position', ['unit' => 2, 'row' => 10, 'side' => 'D']);
+        ->assertJsonPath('data.position', ['unit' => 2, 'row' => 10, 'side' => 'D', 'level' => 1]);
 
     $summary = $this->getJson(route('loading.manifest.summary', $manifest))
         ->assertOk()
@@ -46,7 +46,7 @@ it('places a DG pallet on the trailer and reports it in the summary', function (
     expect($summary['consignments_total'])->toBe(1)
         ->and($summary['consignments_complete'])->toBe(1)
         ->and(collect($summary['dg_items'])->firstWhere('id', $pallet->getKey())['position'])
-        ->toBe(['unit' => 2, 'row' => 10, 'side' => 'D']);
+        ->toBe(['unit' => 2, 'row' => 10, 'side' => 'D', 'level' => 1]);
 });
 
 it('clears a position', function () {
@@ -75,6 +75,26 @@ it('refuses a position another pallet already holds', function () {
 
     // Re-saving the same pallet into its own slot is fine.
     $this->patchJson(route('loading.manifest.position', [$manifest, $first]), $slot)->assertOk();
+});
+
+it('lets a second pallet stack on top of the same spot', function () {
+    [$manifest, $first, $second] = positionFixture();
+    $this->actingAs(User::factory()->create());
+    $spot = ['unit' => 1, 'row' => 3, 'side' => 'D'];
+
+    $this->patchJson(route('loading.manifest.position', [$manifest, $first]), $spot)->assertOk();
+
+    $this->patchJson(route('loading.manifest.position', [$manifest, $second]), $spot + ['level' => 2])
+        ->assertOk()
+        ->assertJsonPath('data.position.level', 2);
+
+    // The top is now taken too, but the floor and the top are separate spots.
+    $this->patchJson(route('loading.manifest.position', [$manifest, $first]), $spot + ['level' => 2])
+        ->assertStatus(409)
+        ->assertJsonPath('error.code', 'position_taken');
+
+    $this->patchJson(route('loading.manifest.position', [$manifest, $first]), $spot + ['level' => 3])
+        ->assertUnprocessable();
 });
 
 it('rejects positions outside the trailer layout', function () {

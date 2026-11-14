@@ -32,6 +32,8 @@ class UpdateManifestItemPositionController extends Controller
             'unit' => ['nullable', 'integer', 'min:1', 'required_with:row,side'],
             'row' => ['nullable', 'integer', 'min:1', 'required_with:unit,side'],
             'side' => ['nullable', Rule::in(['D', 'P']), 'required_with:unit,row'],
+            // 1 = floor (the default), 2 = stacked on top.
+            'level' => ['nullable', 'integer', 'between:1,2'],
             'acknowledged_warnings' => ['sometimes', 'array'],
             'acknowledged_warnings.*' => [Rule::enum(LoadWarningType::class)],
         ]);
@@ -44,6 +46,7 @@ class UpdateManifestItemPositionController extends Controller
         $unit = $validated['unit'] ?? null;
         $row = $validated['row'] ?? null;
         $side = $validated['side'] ?? null;
+        $level = $unit === null ? null : ($validated['level'] ?? 1);
 
         if ($unit !== null) {
             $rows = $manifest->trailer_type->rows();
@@ -59,6 +62,7 @@ class UpdateManifestItemPositionController extends Controller
                 ->where('trailer_unit', $unit)
                 ->where('trailer_row', $row)
                 ->where('trailer_side', $side)
+                ->where('trailer_level', $level)
                 ->where('id', '!=', $item->getKey())
                 ->with('handlingUnit:id,barcode')
                 ->first();
@@ -90,6 +94,7 @@ class UpdateManifestItemPositionController extends Controller
             'trailer_unit' => $unit,
             'trailer_row' => $row,
             'trailer_side' => $side,
+            'trailer_level' => $level,
         ])->save();
 
         if ($issues !== []) {
@@ -101,7 +106,7 @@ class UpdateManifestItemPositionController extends Controller
             $acknowledgement->client_event_id = (string) Str::uuid();
             $acknowledgement->acknowledged_at = now();
             $acknowledgement->metadata = [
-                'placement' => ['unit' => $unit, 'row' => $row, 'side' => $side],
+                'placement' => ['unit' => $unit, 'row' => $row, 'side' => $side, 'level' => $level],
                 'is_food' => $handlingUnit->is_food,
                 'dg_class' => $handlingUnit->dg_class,
                 'issues' => $issues,
@@ -111,7 +116,7 @@ class UpdateManifestItemPositionController extends Controller
 
         return response()->json([
             'data' => [
-                'position' => $unit === null ? null : ['unit' => $unit, 'row' => $row, 'side' => $side],
+                'position' => $unit === null ? null : ['unit' => $unit, 'row' => $row, 'side' => $side, 'level' => $level],
             ],
         ]);
     }

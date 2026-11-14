@@ -39,21 +39,30 @@ export default function ConsignmentPill({
     return (
         <li
             className={cn(
-                'relative overflow-hidden rounded-full border bg-card',
+                'relative overflow-hidden rounded-2xl border bg-card',
                 colours.border,
             )}
-            aria-label={`${pill.connote_number}: ${pill.in_bay} of ${pill.item_count} in ${bayCode}, ${pill.out_there} still to place`}
+            aria-label={`${pill.sender_name ?? ''} ${pill.connote_number}: ${pill.in_bay} of ${pill.item_count} in ${bayCode}, ${pill.out_there} still to place`}
         >
             <span
                 aria-hidden
                 className={cn('absolute inset-y-0 left-0', colours.fill)}
                 style={{ width: `${Math.round(pill.placed_share * 100)}%` }}
             />
-            <span className="relative flex items-baseline gap-2 px-3 py-1.5">
-                <span className="text-sm font-bold">{pill.connote_number}</span>
+            <span className="relative flex items-center justify-between gap-3 px-4 py-2">
+                <span className="min-w-0">
+                    <span className="block truncate text-base font-bold">
+                        {pill.sender_name ?? pill.connote_number}
+                    </span>
+                    {pill.sender_name && (
+                        <span className="block text-xs text-muted-foreground">
+                            {pill.connote_number}
+                        </span>
+                    )}
+                </span>
                 <span
                     className={cn(
-                        'text-sm font-semibold tabular-nums',
+                        'shrink-0 text-base font-semibold tabular-nums',
                         colours.text,
                     )}
                 >

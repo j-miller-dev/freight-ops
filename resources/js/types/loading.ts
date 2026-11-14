@@ -3,6 +3,8 @@ export type TrailerPosition = {
     row: number;
     // D = driver side, P = passenger side.
     side: 'D' | 'P';
+    // 1 = on the floor, 2 = stacked on top.
+    level: 1 | 2;
 };
 
 export type DgItem = {

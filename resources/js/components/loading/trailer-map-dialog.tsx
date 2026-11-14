@@ -10,7 +10,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { positionLabel, sideName, unitName } from '@/lib/trailer-types';
+import {
+    levelName,
+    positionLabel,
+    sideName,
+    unitName,
+} from '@/lib/trailer-types';
 import { cn } from '@/lib/utils';
 import type {
     DgItem,
@@ -32,13 +37,21 @@ type Props = {
     ) => Promise<boolean>;
     // The pallet that was just scanned, when the dialog opened because of it.
     justLoaded: DgItem | null;
+    autoOpen: boolean;
+    onAutoOpenChange: (value: boolean) => void;
 };
 
 const SIDES: TrailerPosition['side'][] = ['P', 'D'];
+// Top first, so the map reads like looking at a stack from the side.
+const LEVELS: TrailerPosition['level'][] = [2, 1];
 
 function samePosition(a: TrailerPosition | null, b: TrailerPosition): boolean {
     return (
-        a !== null && a.unit === b.unit && a.row === b.row && a.side === b.side
+        a !== null &&
+        a.unit === b.unit &&
+        a.row === b.row &&
+        a.side === b.side &&
+        a.level === b.level
     );
 }
 
@@ -51,6 +64,8 @@ export default function TrailerMapDialog({
     onActiveChange,
     onPlace,
     justLoaded,
+    autoOpen,
+    onAutoOpenChange,
 }: Props) {
     const [saving, setSaving] = useState(false);
     const unitCount = trailer.rows.length;
@@ -251,7 +266,7 @@ export default function TrailerMapDialog({
                                                     )}
                                                 >
                                                     {item.position
-                                                        ? `${unitName(unitCount, item.position.unit - 1)} · row ${item.position.row} · ${sideName(item.position.side)}`
+                                                        ? `${unitName(unitCount, item.position.unit - 1)} · row ${item.position.row} · ${sideName(item.position.side)} · ${levelName(item.position.level)}`
                                                         : 'Not placed'}
                                                 </span>
                                             </span>
@@ -263,7 +278,32 @@ export default function TrailerMapDialog({
                     </div>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="items-center sm:justify-between">
+                    <label className="flex cursor-pointer items-center gap-3 text-sm">
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={autoOpen}
+                            onClick={() => onAutoOpenChange(!autoOpen)}
+                            className={cn(
+                                'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
+                                autoOpen ? 'bg-primary' : 'bg-muted',
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    'absolute top-0.5 left-0.5 size-4.5 rounded-full bg-background shadow transition-transform',
+                                    autoOpen && 'translate-x-5',
+                                )}
+                            />
+                        </button>
+                        <span>
+                            Open by itself after scanning DG
+                            <span className="block text-xs text-muted-foreground">
+                                Off: use the DG tile to place pallets.
+                            </span>
+                        </span>
+                    </label>
                     <Button
                         size="touch"
                         variant={justLoaded ? 'outline' : 'default'}
@@ -298,35 +338,51 @@ function RowCells({
                 {row}
             </span>
 
-            {SIDES.map((side) => {
-                const position: TrailerPosition = { unit, row, side };
-                const occupant = items.find((item) =>
-                    samePosition(item.position, position),
-                );
-                const isActive =
-                    occupant !== undefined && occupant.id === active?.id;
+            {SIDES.map((side) => (
+                <div key={side} className="flex flex-col gap-0.5">
+                    {LEVELS.map((level) => {
+                        const position: TrailerPosition = {
+                            unit,
+                            row,
+                            side,
+                            level,
+                        };
+                        const occupant = items.find((item) =>
+                            samePosition(item.position, position),
+                        );
+                        const isActive =
+                            occupant !== undefined &&
+                            occupant.id === active?.id;
 
-                return (
-                    <button
-                        key={side}
-                        type="button"
-                        disabled={disabled && !occupant}
-                        onClick={() => onTap(position)}
-                        aria-label={`Row ${row}, ${sideName(side)}${occupant ? `, class ${occupant.dg_class}` : ''}`}
-                        className={cn(
-                            'flex h-9 items-center justify-center rounded-md border text-xs transition-colors',
-                            occupant
-                                ? 'bg-card'
-                                : 'bg-card/60 hover:border-primary hover:bg-primary/10 disabled:opacity-50',
-                            isActive && 'ring-2 ring-primary',
-                        )}
-                    >
-                        {occupant && (
-                            <DgDiamond cls={occupant.dg_class} size={26} />
-                        )}
-                    </button>
-                );
-            })}
+                        return (
+                            <button
+                                key={level}
+                                type="button"
+                                disabled={disabled && !occupant}
+                                onClick={() => onTap(position)}
+                                aria-label={`Row ${row}, ${sideName(side)}, ${levelName(level)}${occupant ? `, class ${occupant.dg_class}` : ''}`}
+                                className={cn(
+                                    'flex items-center justify-center rounded-md border text-[9px] text-muted-foreground transition-colors',
+                                    level === 2 ? 'h-6 border-dashed' : 'h-8',
+                                    occupant
+                                        ? 'bg-card'
+                                        : 'bg-card/60 hover:border-primary hover:bg-primary/10 disabled:opacity-50',
+                                    isActive && 'ring-2 ring-primary',
+                                )}
+                            >
+                                {occupant ? (
+                                    <DgDiamond
+                                        cls={occupant.dg_class}
+                                        size={level === 2 ? 20 : 24}
+                                    />
+                                ) : level === 2 ? (
+                                    'top'
+                                ) : null}
+                            </button>
+                        );
+                    })}
+                </div>
+            ))}
         </>
     );
 }
